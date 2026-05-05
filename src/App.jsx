@@ -148,7 +148,7 @@ export default function App() {
     const pendingProfiles = strategicModel.profiles.filter((item) => item.pendingThisYear);
     const tramitableProfiles = strategicModel.profiles.filter((item) => item.hasPmeResources);
     const nonTramitableProfiles = strategicModel.profiles.filter((item) => !item.hasPmeResources);
-    const notCovered2025Profiles = pendingProfiles.filter((item) => !item.wasCovered2025);
+    const notCovered2025Profiles = tramitableProfiles.filter((item) => !item.wasCovered2025);
     const pendingBudget = pendingProfiles.reduce((sum, item) => sum + item.estimatedBudgetForPlanningYear, 0);
     const coverageRate = tramitableProfiles.length
       ? (tramitableProfiles.length - pendingProfiles.length) / tramitableProfiles.length
@@ -297,15 +297,15 @@ export default function App() {
                 tone="amber"
               />
               <MetricCard
-                title={`Pendientes ${effectivePlanningYear}`}
+                title={`Priorizables ${effectivePlanningYear}`}
                 value={formatNumber(strategicMetrics.pendingCount)}
-                helper="Escuelas tramitables sin salida pedagógica en el año activo"
+                helper="Escuelas con recursos PME y sin salida en el último PME disponible"
                 tone="emerald"
               />
               <MetricCard
                 title="No cubiertas 2025"
                 value={formatNumber(strategicMetrics.notCovered2025Count)}
-                helper="Criterio prioritario para decidir el trabajo 2026"
+                helper="Base priorizable que no fue abordada durante 2025"
                 tone="sky"
               />
             </section>
@@ -354,7 +354,7 @@ export default function App() {
 
             <SectionCard
               title="Prioridad 2026"
-              description="Ranking, estrategia de asignación y lectura presupuestaria para decidir a quiénes les toca salida este año entre las escuelas con recursos PME."
+              description="Ranking y criterios de priorización para definir qué escuelas abordar en 2026 a partir de la cobertura 2025 y el contexto territorial."
               actions={
                 <div className="flex flex-wrap items-center gap-3">
                   <label className="flex items-center gap-2 rounded-2xl bg-slate-50 px-3 py-2 text-sm text-slate-600">
@@ -466,22 +466,6 @@ export default function App() {
                 </div>
 
                 <div className="space-y-4">
-                  <div className="rounded-[1.75rem] border border-slate-200 bg-white p-5 shadow-sm">
-                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Condición de tramitación</p>
-                    <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                      <div className="rounded-2xl bg-emerald-50 p-4">
-                        <p className="text-xs uppercase tracking-[0.18em] text-emerald-700">Con recursos PME</p>
-                        <p className="mt-2 text-2xl font-semibold text-emerald-800">{formatNumber(strategicMetrics.tramitableCount)}</p>
-                        <p className="mt-1 text-sm text-emerald-700">Base válida para distribuir gasto</p>
-                      </div>
-                      <div className="rounded-2xl bg-red-50 p-4">
-                        <p className="text-xs uppercase tracking-[0.18em] text-red-700">Sin recursos PME</p>
-                        <p className="mt-2 text-2xl font-semibold text-red-800">{formatNumber(strategicMetrics.nonTramitableCount)}</p>
-                        <p className="mt-1 text-sm text-red-700">No pueden tramitarse por falta de recursos</p>
-                      </div>
-                    </div>
-                  </div>
-
                   <div className="rounded-[1.75rem] border border-brand-mist bg-[linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)] p-5 shadow-sm">
                     <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Criterios de prioridad 2026</p>
                     <h3 className="mt-2 text-lg font-semibold text-brand-navy">Cómo se define la priorización</h3>
@@ -502,7 +486,7 @@ export default function App() {
                     </div>
 
                     <div className="mt-4 rounded-2xl bg-brand-mist p-4 text-sm text-slate-600">
-                      <p><span className="font-semibold text-brand-navy">No cubiertas 2025:</span> {formatNumber(strategicMetrics.notCovered2025Count)} escuelas pendientes.</p>
+                      <p><span className="font-semibold text-brand-navy">No cubiertas 2025:</span> {formatNumber(strategicMetrics.notCovered2025Count)} escuelas priorizables.</p>
                       <p className="mt-2"><span className="font-semibold text-brand-navy">Comuna más rezagada:</span> {strategicMetrics.weakestCommune?.name || 'Sin dato'}.</p>
                     </div>
                   </div>
@@ -511,7 +495,7 @@ export default function App() {
                     <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/70">Lectura ejecutiva</p>
                     <p className="mt-3 text-sm leading-7 text-white/80">
                       Bajo la estrategia <span className="font-semibold text-white">{getStrategyLabel(strategy)}</span>, el sistema prioriza
-                      {showPendingOnly ? ' escuelas tramitables pendientes del año activo' : ' el universo completo filtrado'} y ordena primero las no cubiertas en 2025, estimando una cobertura de
+                      {showPendingOnly ? ' escuelas priorizables con recursos PME' : ' el universo completo filtrado'} y ordena primero las no cubiertas en 2025, estimando una cobertura de
                       <span className="font-semibold text-white"> {formatPercent(strategicMetrics.coverageRate)}</span> dentro de la base con recursos PME para {effectivePlanningYear}.
                     </p>
                     <p className="mt-4 text-sm leading-7 text-white/80">

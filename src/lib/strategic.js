@@ -28,6 +28,21 @@ function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max);
 }
 
+function getYearWeight(value) {
+  const match = String(value || '').match(/20\d{2}/);
+  return match ? Number(match[0]) : -1;
+}
+
+function getReferenceYear(records, planningYear) {
+  const availableYears = [...new Set((records || []).map((item) => item?.year).filter(Boolean))];
+
+  if (availableYears.includes(planningYear)) {
+    return planningYear;
+  }
+
+  return availableYears.sort((left, right) => getYearWeight(right) - getYearWeight(left))[0] || planningYear;
+}
+
 function getPriorityLabel(score) {
   if (score >= 70) {
     return 'Alta';
@@ -203,13 +218,29 @@ export function buildStrategicProfiles(records, planningYear, strategy = 'covera
     buckets.set(item.rbd, existing);
   });
 
-  const profiles = [...buckets.values()].map((item) => ({
-    ...item,
-    dimensions: [...item.dimensions].sort(),
-    hasPmeResources: item.estimatedBudgetForPlanningYear > 0,
-    pendingThisYear: item.hasPlanningYearRecord && item.estimatedBudgetForPlanningYear > 0 && !item.hasOutingThisYear,
-    blockedByMissingBudget: item.hasPlanningYearRecord && item.estimatedBudgetForPlanningYear <= 0,
-  }));
+  const profiles = [...buckets.values()].map((item) => {
+    const referenceYear = getReferenceYear(item.records, planningYear);
+    const referenceRecords = item.records.filter((record) => record.year === referenceYear);
+    const actionsForReferenceYear = referenceRecords.reduce((sum, record) => sum + (Number(record.actionCount) || 0), 0);
+    const estimatedBudgetForReferenceYear = referenceRecords.reduce((sum, record) => sum + (Number(record.estimatedBudget) || 0), 0);
+    const hasOutingReferenceYear = referenceRecords.some((record) => Boolean(record.hasPedagogicalOuting));
+    const hasReferenceYearRecord = referenceRecords.length > 0;
+
+    return {
+      ...item,
+      dimensions: [...item.dimensions].sort(),
+      referenceYear,
+      hasPlanningYearRecord: item.hasPlanningYearRecord,
+      hasReferenceYearRecord,
+      actionsForPlanningYear: actionsForReferenceYear,
+      estimatedBudgetForPlanningYear: estimatedBudgetForReferenceYear,
+      hasOutingThisYear: hasOutingReferenceYear,
+      hasPmeResources: estimatedBudgetForReferenceYear > 0,
+      pendingThisYear: estimatedBudgetForReferenceYear > 0 && !hasOutingReferenceYear,
+      blockedByMissingBudget: hasReferenceYearRecord && estimatedBudgetForReferenceYear <= 0,
+      isUsingFallbackYear: referenceYear !== planningYear,
+    };
+  });
 
   const communeBuckets = {};
   const ruralityBuckets = {};

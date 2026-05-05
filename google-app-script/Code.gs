@@ -36,7 +36,9 @@ function buildDashboardPayload() {
       return;
     }
 
-    establishmentsMap[rbd] = row;
+    getRbdLookupKeys(rbd).forEach(function(key) {
+      establishmentsMap[key] = row;
+    });
   });
 
   covered2025Rows.forEach(function(row) {
@@ -45,7 +47,9 @@ function buildDashboardPayload() {
       return;
     }
 
-    covered2025Map[rbd] = true;
+    getRbdLookupKeys(rbd).forEach(function(key) {
+      covered2025Map[key] = true;
+    });
   });
 
   var records = analysisRows
@@ -56,7 +60,7 @@ function buildDashboardPayload() {
         return null;
       }
 
-      var establishment = establishmentsMap[rbd] || {};
+      var establishment = findByRbdLookup(establishmentsMap, rawRbd) || {};
       var hasPedagogicalOuting = parseBooleanFlag(
         pickFirst(row, ['si', 'salidas', 'tiene_salida', 'tiene_salidas', 'salida_pedagogica'])
       );
@@ -82,7 +86,7 @@ function buildDashboardPayload() {
         area: pickFirst(establishment, ['area_geografica', 'area', 'zona']) || 'Sin dato',
         rurality: pickFirst(establishment, ['ruralidad', 'rural', 'urbano_rural', 'rural_urbano']) || 'Sin dato',
         year: year,
-        wasCovered2025: Boolean(covered2025Map[rbd]),
+        wasCovered2025: hasRbdLookupMatch(covered2025Map, rawRbd),
         hasPedagogicalOuting: hasPedagogicalOuting,
         actionCount: actionCount,
         dimensions: dimensions,
@@ -216,6 +220,45 @@ function normalizeRbd(value) {
     .toUpperCase()
     .replace(/\s+/g, '')
     .replace(/[^0-9K-]/g, '');
+}
+
+function getRbdLookupKeys(value) {
+  var raw = String(value || '').toUpperCase().replace(/\s+/g, '');
+  var normalized = normalizeRbd(raw);
+  var bucket = {};
+
+  if (!normalized) {
+    return [];
+  }
+
+  bucket[normalized] = true;
+  bucket[normalized.replace(/-/g, '')] = true;
+
+  if (normalized.indexOf('-') >= 0) {
+    bucket[normalized.split('-')[0]] = true;
+  } else if (/[K]$/.test(raw)) {
+    bucket[normalized.slice(0, -1)] = true;
+  }
+
+  return Object.keys(bucket).filter(function(item) {
+    return item;
+  });
+}
+
+function findByRbdLookup(source, value) {
+  var keys = getRbdLookupKeys(value);
+
+  for (var index = 0; index < keys.length; index += 1) {
+    if (source[keys[index]]) {
+      return source[keys[index]];
+    }
+  }
+
+  return null;
+}
+
+function hasRbdLookupMatch(source, value) {
+  return Boolean(findByRbdLookup(source, value));
 }
 
 function firstFilledValue(row) {
