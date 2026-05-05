@@ -14,8 +14,8 @@ export default function EstablishmentTable({ items, onOpen, strategicMap = {} })
   const [statusFilter, setStatusFilter] = useState('all');
   const [yearFilter, setYearFilter] = useState('all');
   const [actionsFilter, setActionsFilter] = useState('all');
+  const [coverage2025Filter, setCoverage2025Filter] = useState('all');
   const [sortBy, setSortBy] = useState('priority');
-  const [sortDirection, setSortDirection] = useState('desc');
 
   const yearOptions = useMemo(
     () => [...new Set(items.map((item) => item.year).filter(Boolean))].sort(),
@@ -47,13 +47,14 @@ export default function EstablishmentTable({ items, onOpen, strategicMap = {} })
 
       const matchesYear = yearFilter === 'all' || item.year === yearFilter;
       const matchesActions = actionsFilter === 'all' || String(item.actionCount) === actionsFilter;
+      const matchesCoverage2025 = coverage2025Filter === 'all'
+        || (coverage2025Filter === 'not-covered' && item.year === '2025' && !item.wasCovered2025);
 
-      return matchesSchool && matchesStatus && matchesYear && matchesActions;
+      return matchesSchool && matchesStatus && matchesYear && matchesActions && matchesCoverage2025;
     });
-  }, [actionsFilter, itemsWithProfiles, schoolFilter, statusFilter, yearFilter]);
+  }, [actionsFilter, coverage2025Filter, itemsWithProfiles, schoolFilter, statusFilter, yearFilter]);
 
   const sortedItems = useMemo(() => {
-    const direction = sortDirection === 'asc' ? 1 : -1;
     const priorityOrder = { Alta: 3, Media: 2, Baja: 1 };
 
     return [...filteredItems].sort((left, right) => {
@@ -63,14 +64,11 @@ export default function EstablishmentTable({ items, onOpen, strategicMap = {} })
       let comparison = 0;
 
       switch (sortBy) {
-        case 'score':
-          comparison = (leftProfile.score || 0) - (rightProfile.score || 0);
-          break;
         case 'budget':
-          comparison = (left.estimatedBudget || 0) - (right.estimatedBudget || 0);
+          comparison = (right.estimatedBudget || 0) - (left.estimatedBudget || 0);
           break;
         case 'actions':
-          comparison = (left.actionCount || 0) - (right.actionCount || 0);
+          comparison = (right.actionCount || 0) - (left.actionCount || 0);
           break;
         case 'commune':
           comparison = String(left.commune || '').localeCompare(String(right.commune || ''), 'es');
@@ -80,9 +78,9 @@ export default function EstablishmentTable({ items, onOpen, strategicMap = {} })
           break;
         case 'priority':
         default:
-          comparison = (priorityOrder[leftProfile.priority] || 0) - (priorityOrder[rightProfile.priority] || 0);
+          comparison = (priorityOrder[rightProfile.priority] || 0) - (priorityOrder[leftProfile.priority] || 0);
           if (comparison === 0) {
-            comparison = (leftProfile.score || 0) - (rightProfile.score || 0);
+            comparison = (right.actionCount || 0) - (left.actionCount || 0);
           }
           break;
       }
@@ -91,9 +89,9 @@ export default function EstablishmentTable({ items, onOpen, strategicMap = {} })
         comparison = String(left.name || '').localeCompare(String(right.name || ''), 'es');
       }
 
-      return comparison * direction;
+      return comparison;
     });
-  }, [filteredItems, sortBy, sortDirection]);
+  }, [filteredItems, sortBy]);
 
   if (!items.length) {
     return (
@@ -179,6 +177,18 @@ export default function EstablishmentTable({ items, onOpen, strategicMap = {} })
         </label>
 
         <label className="flex flex-col gap-2">
+          <span className="text-sm font-medium text-slate-700">Cobertura 2025</span>
+          <select
+            className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-brand-blue focus:ring-4 focus:ring-brand-blue/10"
+            value={coverage2025Filter}
+            onChange={(event) => setCoverage2025Filter(event.target.value)}
+          >
+            <option value="all">Todas</option>
+            <option value="not-covered">No fue cubierta el 2025</option>
+          </select>
+        </label>
+
+        <label className="flex flex-col gap-2">
           <span className="text-sm font-medium text-slate-700">Ordenar por</span>
           <select
             className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-brand-blue focus:ring-4 focus:ring-brand-blue/10"
@@ -186,23 +196,10 @@ export default function EstablishmentTable({ items, onOpen, strategicMap = {} })
             onChange={(event) => setSortBy(event.target.value)}
           >
             <option value="priority">Prioridad</option>
-            <option value="score">Score</option>
             <option value="budget">Monto</option>
             <option value="actions">Acciones</option>
             <option value="commune">Comuna</option>
             <option value="status">Estado</option>
-          </select>
-        </label>
-
-        <label className="flex flex-col gap-2">
-          <span className="text-sm font-medium text-slate-700">Direccion</span>
-          <select
-            className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-brand-blue focus:ring-4 focus:ring-brand-blue/10"
-            value={sortDirection}
-            onChange={(event) => setSortDirection(event.target.value)}
-          >
-            <option value="desc">Mayor a menor</option>
-            <option value="asc">Menor a mayor</option>
           </select>
         </label>
       </div>
@@ -225,9 +222,6 @@ export default function EstablishmentTable({ items, onOpen, strategicMap = {} })
               </th>
               <th className="sticky top-0 z-10 border-b border-slate-200 bg-slate-50 px-4 py-4 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
                 Prioridad
-              </th>
-              <th className="sticky top-0 z-10 border-b border-slate-200 bg-slate-50 px-4 py-4 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-                Score
               </th>
               <th className="sticky top-0 z-10 border-b border-slate-200 bg-slate-50 px-4 py-4 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
                 Año
@@ -305,9 +299,6 @@ export default function EstablishmentTable({ items, onOpen, strategicMap = {} })
                   >
                     {item.strategicProfile?.priority || 'Sin dato'}
                   </span>
-                </td>
-                <td className="border-b border-slate-100 px-4 py-4 align-top text-sm font-semibold text-brand-navy">
-                  {formatNumber(item.strategicProfile?.score || 0)}
                 </td>
                 <td className="border-b border-slate-100 px-4 py-4 align-top">
                   <span className="inline-flex rounded-full bg-brand-mist px-3 py-1 text-xs font-semibold text-brand-navy">
