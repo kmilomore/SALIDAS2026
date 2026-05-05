@@ -48,7 +48,7 @@ export default function EstablishmentTable({ items, onOpen, strategicMap = {} })
       const matchesYear = yearFilter === 'all' || item.year === yearFilter;
       const matchesActions = actionsFilter === 'all' || String(item.actionCount) === actionsFilter;
       const matchesCoverage2025 = coverage2025Filter === 'all'
-        || (coverage2025Filter === 'not-covered' && item.year === '2025' && !item.wasCovered2025);
+        || (coverage2025Filter === 'not-covered' && !item.wasCovered2025);
 
       return matchesSchool && matchesStatus && matchesYear && matchesActions && matchesCoverage2025;
     });
