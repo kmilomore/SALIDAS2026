@@ -14,7 +14,6 @@ import {
 import { Activity, Building2, CircleDollarSign, RefreshCw, SlidersHorizontal, Target } from 'lucide-react';
 import EstablishmentModal from './components/EstablishmentModal';
 import EstablishmentTable from './components/EstablishmentTable';
-import FilterBar from './components/FilterBar';
 import MetricCard from './components/MetricCard';
 import SectionCard from './components/SectionCard';
 import { fetchDashboardData } from './lib/api';
@@ -53,6 +52,7 @@ export default function App() {
   const [planningYear, setPlanningYear] = useState('auto');
   const [showPendingOnly, setShowPendingOnly] = useState(true);
   const [budgetInput, setBudgetInput] = useState('15000000');
+  const [budgetTouched, setBudgetTouched] = useState(false);
   const [selectedItem, setSelectedItem] = useState(null);
 
   useEffect(() => {
@@ -174,6 +174,18 @@ export default function App() {
       territorialSummary: strategicModel.communeCoverage.slice(0, 6),
     };
   }, [strategicModel, strategicProfiles]);
+
+  useEffect(() => {
+    if (!budgetTouched && strategicMetrics.pendingBudget > 0) {
+      setBudgetInput(String(Math.round(strategicMetrics.pendingBudget)));
+    }
+  }, [budgetTouched, strategicMetrics.pendingBudget]);
+
+  const parsedBudgetInput = Number(budgetInput) || 0;
+  const budgetSliderMax = Math.max(Math.round(strategicMetrics.pendingBudget || 0), 1000000);
+  const budgetCoverageShare = strategicMetrics.pendingCount
+    ? budgetSimulation.coveredCount / strategicMetrics.pendingCount
+    : 0;
 
   const derivedMetrics = useMemo(() => {
     const totalRecords = filteredItems.length;
@@ -466,15 +478,81 @@ export default function App() {
                   <div className="rounded-[1.75rem] border border-brand-mist bg-[linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)] p-5 shadow-sm">
                     <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Simulador de presupuesto</p>
                     <h3 className="mt-2 text-lg font-semibold text-brand-navy">Cuánto alcanza el presupuesto disponible</h3>
+                    <p className="mt-2 text-sm text-slate-500">
+                      Ajusta el monto y verás en tiempo real cuántas escuelas tramitables pueden cubrirse.
+                    </p>
                     <label className="mt-4 flex flex-col gap-2">
                       <span className="text-sm font-medium text-slate-700">Monto total disponible</span>
                       <input
                         className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-brand-blue focus:ring-4 focus:ring-brand-blue/10"
                         value={budgetInput}
-                        onChange={(event) => setBudgetInput(event.target.value.replace(/[^0-9]/g, ''))}
+                        onChange={(event) => {
+                          setBudgetTouched(true);
+                          setBudgetInput(event.target.value.replace(/[^0-9]/g, ''));
+                        }}
                         placeholder="Ej. 15000000"
+                        inputMode="numeric"
                       />
                     </label>
+
+                    <div className="mt-3 flex items-center justify-between gap-3 text-sm">
+                      <span className="rounded-full bg-slate-100 px-3 py-1 font-medium text-slate-600">
+                        Ingresado: {formatCurrency(parsedBudgetInput)}
+                      </span>
+                      <span className="rounded-full bg-brand-mist px-3 py-1 font-medium text-brand-navy">
+                        Objetivo total: {formatCurrency(strategicMetrics.pendingBudget)}
+                      </span>
+                    </div>
+
+                    <div className="mt-4">
+                      <input
+                        type="range"
+                        min="0"
+                        max={budgetSliderMax}
+                        step={Math.max(Math.round(budgetSliderMax / 100), 10000)}
+                        value={Math.min(parsedBudgetInput, budgetSliderMax)}
+                        onChange={(event) => {
+                          setBudgetTouched(true);
+                          setBudgetInput(event.target.value);
+                        }}
+                        className="h-2 w-full cursor-pointer appearance-none rounded-full bg-slate-200 accent-[#25306B]"
+                      />
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {[0.25, 0.5, 0.75, 1].map((fraction) => {
+                          const nextValue = Math.round(budgetSliderMax * fraction);
+
+                          return (
+                            <button
+                              key={fraction}
+                              type="button"
+                              onClick={() => {
+                                setBudgetTouched(true);
+                                setBudgetInput(String(nextValue));
+                              }}
+                              className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600 transition hover:border-brand-blue hover:text-brand-blue"
+                            >
+                              {Math.round(fraction * 100)}%
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <div className="mt-4 rounded-2xl bg-slate-50 p-4">
+                      <div className="flex items-center justify-between gap-3 text-sm">
+                        <span className="font-medium text-slate-700">Cobertura simulada</span>
+                        <span className="font-semibold text-brand-navy">{formatPercent(budgetCoverageShare)}</span>
+                      </div>
+                      <div className="mt-3 h-3 overflow-hidden rounded-full bg-slate-200">
+                        <div
+                          className="h-full rounded-full bg-[linear-gradient(90deg,#25306B_0%,#006BB9_100%)] transition-all duration-300"
+                          style={{ width: `${Math.max(Math.min(budgetCoverageShare * 100, 100), 0)}%` }}
+                        />
+                      </div>
+                      <p className="mt-2 text-sm text-slate-500">
+                        {formatNumber(budgetSimulation.coveredCount)} de {formatNumber(strategicMetrics.pendingCount)} escuelas tramitables cubiertas.
+                      </p>
+                    </div>
 
                     <div className="mt-4 grid gap-3 sm:grid-cols-2">
                       <div className="rounded-2xl bg-slate-50 p-4">
@@ -493,6 +571,34 @@ export default function App() {
                       <p><span className="font-semibold text-brand-navy">Comunas cubiertas:</span> {budgetSimulation.coveredCommunes.join(', ') || 'Sin cobertura simulada'}</p>
                       <p className="mt-2"><span className="font-semibold text-brand-navy">Comunas fuera:</span> {budgetSimulation.uncoveredCommunes.join(', ') || 'Ninguna'}</p>
                     </div>
+
+                    <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                      <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Entran en el presupuesto</p>
+                        <div className="mt-3 space-y-2 text-sm text-slate-600">
+                          {budgetSimulation.covered.slice(0, 3).map((item) => (
+                            <div key={item.rbd} className="rounded-xl bg-slate-50 px-3 py-2">
+                              <p className="font-medium text-slate-800">{item.name}</p>
+                              <p className="text-xs text-slate-500">{item.commune} · {formatCurrency(item.estimatedBudgetForPlanningYear)}</p>
+                            </div>
+                          ))}
+                          {!budgetSimulation.covered.length ? <p>No hay escuelas cubiertas con el monto actual.</p> : null}
+                        </div>
+                      </div>
+
+                      <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Quedan fuera</p>
+                        <div className="mt-3 space-y-2 text-sm text-slate-600">
+                          {budgetSimulation.uncovered.slice(0, 3).map((item) => (
+                            <div key={item.rbd} className="rounded-xl bg-slate-50 px-3 py-2">
+                              <p className="font-medium text-slate-800">{item.name}</p>
+                              <p className="text-xs text-slate-500">{item.commune} · {formatCurrency(item.estimatedBudgetForPlanningYear)}</p>
+                            </div>
+                          ))}
+                          {!budgetSimulation.uncovered.length ? <p>Ninguna escuela queda fuera con el monto actual.</p> : null}
+                        </div>
+                      </div>
+                    </div>
                   </div>
 
                   <div className="rounded-[1.75rem] bg-[linear-gradient(135deg,rgba(37,48,107,0.95)_0%,rgba(44,61,158,0.88)_100%)] p-5 text-white">
@@ -508,24 +614,6 @@ export default function App() {
                   </div>
                 </div>
               </div>
-            </SectionCard>
-
-            <SectionCard
-              title="Panel de control"
-              description="Filtra la base y explora el comportamiento general del PME por establecimiento."
-            >
-              <FilterBar
-                search={search}
-                onSearchChange={setSearch}
-                status={status}
-                onStatusChange={setStatus}
-                year={year}
-                onYearChange={setYear}
-                years={years}
-                dimension={dimension}
-                onDimensionChange={setDimension}
-                dimensions={dimensions}
-              />
             </SectionCard>
 
             <SectionCard
