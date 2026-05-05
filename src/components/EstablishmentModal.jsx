@@ -47,7 +47,7 @@ function KeyValueTable({ rows }) {
   );
 }
 
-export default function EstablishmentModal({ item, onClose }) {
+export default function EstablishmentModal({ item, strategicProfile, planningYear, strategyLabel, onClose }) {
   if (!item) {
     return null;
   }
@@ -71,6 +71,16 @@ export default function EstablishmentModal({ item, onClose }) {
               <span className="rounded-full bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-700">
                 {formatNumber(item.actionCount)} acciones
               </span>
+              <span className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                strategicProfile?.priority === 'Alta'
+                  ? 'bg-red-100 text-red-700'
+                  : strategicProfile?.priority === 'Media'
+                    ? 'bg-amber-100 text-amber-700'
+                    : 'bg-slate-100 text-slate-700'
+              }`}
+              >
+                Prioridad {strategicProfile?.priority || 'Sin dato'}
+              </span>
             </div>
           </div>
           <button
@@ -90,6 +100,39 @@ export default function EstablishmentModal({ item, onClose }) {
               <DetailRow label="N° acciones" value={formatNumber(item.actionCount)} />
               <DetailRow label="Monto estimado" value={formatCurrency(item.estimatedBudget)} />
               <DetailRow label="Dimensiones" value={item.dimensions.join(', ')} />
+            </div>
+
+            <div className="rounded-[1.75rem] border border-slate-200 bg-white p-5">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-slate-900">Lectura estrategica</p>
+                  <p className="mt-1 text-sm text-slate-500">Explica por que este establecimiento queda en determinada prioridad para {planningYear}.</p>
+                </div>
+                <span className="rounded-full bg-brand-mist px-3 py-1 text-xs font-semibold text-brand-navy">
+                  {strategyLabel || 'Sin estrategia'}
+                </span>
+              </div>
+
+              <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                <DetailRow label="Score" value={formatNumber(strategicProfile?.score || 0)} />
+                <DetailRow label="Prioridad" value={strategicProfile?.priority || 'Sin dato'} />
+                <DetailRow label="Recomendación" value={strategicProfile?.recommendation || 'Sin recomendacion'} />
+                <DetailRow
+                  label="Monto año activo"
+                  value={formatCurrency(strategicProfile?.estimatedBudgetForPlanningYear || 0)}
+                />
+              </div>
+
+              <div className="mt-4 rounded-2xl bg-slate-50 p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Motivos de priorización</p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {(strategicProfile?.reasons?.length ? strategicProfile.reasons : ['Sin explicacion estrategica']).map((reason) => (
+                    <span key={reason} className="rounded-full bg-white px-3 py-2 text-xs font-medium text-slate-700 shadow-sm">
+                      {reason}
+                    </span>
+                  ))}
+                </div>
+              </div>
             </div>
 
             <div className="rounded-[1.75rem] bg-slate-50 p-5">

@@ -11,7 +11,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { Activity, Building2, CircleDollarSign, RefreshCw } from 'lucide-react';
+import { Activity, Building2, CircleDollarSign, RefreshCw, SlidersHorizontal, Target } from 'lucide-react';
 import EstablishmentModal from './components/EstablishmentModal';
 import EstablishmentTable from './components/EstablishmentTable';
 import FilterBar from './components/FilterBar';
@@ -19,8 +19,20 @@ import MetricCard from './components/MetricCard';
 import SectionCard from './components/SectionCard';
 import { fetchDashboardData } from './lib/api';
 import { formatCurrency, formatDate, formatNumber } from './lib/formatters';
+import { buildBudgetSimulation, buildStrategicProfiles, getStrategyLabel, resolvePlanningYear } from './lib/strategic';
 
 const PIE_COLORS = ['#25306B', '#006BB9', '#FF1D3D', '#EDF0F5'];
+const STRATEGY_OPTIONS = [
+  { value: 'coverage', label: 'Maximizar cobertura' },
+  { value: 'rural', label: 'Priorizar rurales' },
+  { value: 'balance', label: 'Equilibrar comunas' },
+  { value: 'need', label: 'Priorizar mayor necesidad' },
+  { value: 'lowBudget', label: 'Priorizar menor inversion previa' },
+];
+
+function formatPercent(value) {
+  return `${Math.round((Number(value) || 0) * 100)}%`;
+}
 
 function normalizeText(value) {
   return String(value || '')
@@ -37,6 +49,10 @@ export default function App() {
   const [status, setStatus] = useState('all');
   const [year, setYear] = useState('all');
   const [dimension, setDimension] = useState('all');
+  const [strategy, setStrategy] = useState('coverage');
+  const [planningYear, setPlanningYear] = useState('auto');
+  const [showPendingOnly, setShowPendingOnly] = useState(true);
+  const [budgetInput, setBudgetInput] = useState('15000000');
   const [selectedItem, setSelectedItem] = useState(null);
 
   useEffect(() => {
@@ -93,6 +109,67 @@ export default function App() {
       return matchesSearch && matchesStatus && matchesYear && matchesDimension;
     });
   }, [data, dimension, search, status, year]);
+
+  const strategicScopedItems = useMemo(() => {
+    const items = data?.establishments || [];
+    const normalizedSearch = normalizeText(search);
+
+    return items.filter((item) => {
+      const matchesSearch = !normalizedSearch
+        || normalizeText(item.name).includes(normalizedSearch)
+        || normalizeText(item.rbd).includes(normalizedSearch)
+        || normalizeText(item.commune).includes(normalizedSearch);
+
+      const matchesDimension = dimension === 'all' || item.dimensions.includes(dimension);
+
+      return matchesSearch && matchesDimension;
+    });
+  }, [data, dimension, search]);
+
+  const effectivePlanningYear = useMemo(
+    () => resolvePlanningYear(years, planningYear === 'auto' ? (year === 'all' ? 'auto' : year) : planningYear),
+    [planningYear, year, years],
+  );
+
+  const strategicModel = useMemo(
+    () => buildStrategicProfiles(strategicScopedItems, effectivePlanningYear, strategy),
+    [effectivePlanningYear, strategicScopedItems, strategy],
+  );
+
+  const strategicProfiles = useMemo(
+    () => (showPendingOnly ? strategicModel.profiles.filter((item) => item.pendingThisYear) : strategicModel.profiles),
+    [showPendingOnly, strategicModel.profiles],
+  );
+
+  const strategicMap = useMemo(
+    () => Object.fromEntries(strategicModel.profiles.map((item) => [item.rbd, item])),
+    [strategicModel.profiles],
+  );
+
+  const budgetSimulation = useMemo(
+    () => buildBudgetSimulation(strategicModel.profiles, budgetInput),
+    [budgetInput, strategicModel.profiles],
+  );
+
+  const strategicMetrics = useMemo(() => {
+    const pendingProfiles = strategicModel.profiles.filter((item) => item.pendingThisYear);
+    const pendingBudget = pendingProfiles.reduce((sum, item) => sum + item.estimatedBudgetForPlanningYear, 0);
+    const coverageRate = strategicModel.profiles.length
+      ? (strategicModel.profiles.length - pendingProfiles.length) / strategicModel.profiles.length
+      : 0;
+    const weakestCommune = strategicModel.communeCoverage[0] || null;
+
+    return {
+      pendingCount: pendingProfiles.length,
+      pendingBudget,
+      coverageRate,
+      weakestCommune,
+      topProfiles: strategicProfiles.slice(0, 10),
+      communeCoverage: strategicModel.communeCoverage.slice(0, 8),
+      ruralityCoverage: strategicModel.ruralityCoverage,
+      territorialSummary: strategicModel.communeCoverage.slice(0, 6),
+    };
+  }, [strategicModel, strategicProfiles]);
 
   const derivedMetrics = useMemo(() => {
     const totalRecords = filteredItems.length;
@@ -209,6 +286,35 @@ export default function App() {
           <div className="mt-8 space-y-8">
             <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
               <MetricCard
+                title={`Pendientes ${effectivePlanningYear}`}
+                value={formatNumber(strategicMetrics.pendingCount)}
+                helper="Escuelas sin salida o sin registro para el ano activo"
+                tone="coral"
+              />
+              <MetricCard
+                title="Monto pendiente"
+                value={formatCurrency(strategicMetrics.pendingBudget)}
+                helper="Monto estimado comprometido si se cubren los pendientes"
+                tone="amber"
+              />
+              <MetricCard
+                title="Cobertura actual"
+                value={formatPercent(strategicMetrics.coverageRate)}
+                helper={`Cobertura estrategica observada para ${effectivePlanningYear}`}
+                tone="emerald"
+              />
+              <MetricCard
+                title="Comuna mas rezagada"
+                value={strategicMetrics.weakestCommune?.name || 'Sin dato'}
+                helper={strategicMetrics.weakestCommune
+                  ? `${formatPercent(strategicMetrics.weakestCommune.coverageRate)} de cobertura en el ano activo`
+                  : 'Sin comunas suficientes para comparar'}
+                tone="sky"
+              />
+            </section>
+
+            <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              <MetricCard
                 title="Establecimientos"
                 value={formatNumber(derivedMetrics.totalEstablishments)}
                 helper="Escuelas unicas considerando filtros activos"
@@ -235,6 +341,158 @@ export default function App() {
             </section>
 
             <SectionCard
+              title="Prioridad 2026"
+              description="Ranking, estrategia de asignacion y lectura presupuestaria para decidir a quienes les toca salida este ano."
+              actions={
+                <div className="flex flex-wrap items-center gap-3">
+                  <label className="flex items-center gap-2 rounded-2xl bg-slate-50 px-3 py-2 text-sm text-slate-600">
+                    <Target size={16} />
+                    <span>Ano activo</span>
+                    <select
+                      className="bg-transparent font-medium outline-none"
+                      value={planningYear}
+                      onChange={(event) => setPlanningYear(event.target.value)}
+                    >
+                      <option value="auto">Automatico</option>
+                      {years.map((itemYear) => (
+                        <option key={itemYear} value={itemYear}>
+                          {itemYear}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label className="flex items-center gap-2 rounded-2xl bg-slate-50 px-3 py-2 text-sm text-slate-600">
+                    <SlidersHorizontal size={16} />
+                    <span>Estrategia</span>
+                    <select
+                      className="bg-transparent font-medium outline-none"
+                      value={strategy}
+                      onChange={(event) => setStrategy(event.target.value)}
+                    >
+                      {STRATEGY_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label className="flex items-center gap-2 rounded-2xl bg-slate-50 px-3 py-2 text-sm text-slate-600">
+                    <input
+                      type="checkbox"
+                      checked={showPendingOnly}
+                      onChange={(event) => setShowPendingOnly(event.target.checked)}
+                    />
+                    Solo pendientes del ano
+                  </label>
+                </div>
+              }
+            >
+              <div className="grid gap-8 xl:grid-cols-[1.15fr_0.85fr]">
+                <div className="overflow-hidden rounded-[1.75rem] border border-slate-200 bg-white">
+                  <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Ranking estrategico</p>
+                      <h3 className="mt-1 text-lg font-semibold text-brand-navy">Escuelas sugeridas para intervenir</h3>
+                    </div>
+                    <div className="text-right text-sm text-slate-500">
+                      <p>{getStrategyLabel(strategy)}</p>
+                      <p>{formatNumber(strategicProfiles.length)} escuelas evaluadas</p>
+                    </div>
+                  </div>
+
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full border-separate border-spacing-0 text-sm">
+                      <thead>
+                        <tr className="bg-slate-50 text-left">
+                          <th className="px-4 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Escuela</th>
+                          <th className="px-4 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Comuna</th>
+                          <th className="px-4 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Prioridad</th>
+                          <th className="px-4 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Score</th>
+                          <th className="px-4 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Monto</th>
+                          <th className="px-4 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Motivo</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {strategicMetrics.topProfiles.map((item, index) => (
+                          <tr key={item.rbd} className={index % 2 === 0 ? 'bg-white' : 'bg-slate-50/60'}>
+                            <td className="border-b border-slate-100 px-4 py-3">
+                              <p className="font-semibold text-slate-900">{item.name}</p>
+                              <p className="mt-1 text-xs text-slate-500">RBD {item.rbd}</p>
+                            </td>
+                            <td className="border-b border-slate-100 px-4 py-3 text-slate-600">{item.commune}</td>
+                            <td className="border-b border-slate-100 px-4 py-3">
+                              <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
+                                item.priority === 'Alta'
+                                  ? 'bg-red-100 text-red-700'
+                                  : item.priority === 'Media'
+                                    ? 'bg-amber-100 text-amber-700'
+                                    : 'bg-slate-100 text-slate-700'
+                              }`}
+                              >
+                                {item.priority}
+                              </span>
+                            </td>
+                            <td className="border-b border-slate-100 px-4 py-3 font-semibold text-brand-navy">{formatNumber(item.score)}</td>
+                            <td className="border-b border-slate-100 px-4 py-3 text-slate-700">{formatCurrency(item.estimatedBudgetForPlanningYear)}</td>
+                            <td className="border-b border-slate-100 px-4 py-3 text-slate-500">{item.reasons[0] || 'Sin observacion estrategica'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <div className="rounded-[1.75rem] border border-brand-mist bg-[linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)] p-5 shadow-sm">
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Simulador de presupuesto</p>
+                    <h3 className="mt-2 text-lg font-semibold text-brand-navy">Cuanto alcanza el presupuesto disponible</h3>
+                    <label className="mt-4 flex flex-col gap-2">
+                      <span className="text-sm font-medium text-slate-700">Monto total disponible</span>
+                      <input
+                        className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-brand-blue focus:ring-4 focus:ring-brand-blue/10"
+                        value={budgetInput}
+                        onChange={(event) => setBudgetInput(event.target.value.replace(/[^0-9]/g, ''))}
+                        placeholder="Ej. 15000000"
+                      />
+                    </label>
+
+                    <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                      <div className="rounded-2xl bg-slate-50 p-4">
+                        <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Escuelas cubiertas</p>
+                        <p className="mt-2 text-2xl font-semibold text-brand-navy">{formatNumber(budgetSimulation.coveredCount)}</p>
+                        <p className="mt-1 text-sm text-slate-500">Segun ranking y presupuesto</p>
+                      </div>
+                      <div className="rounded-2xl bg-slate-50 p-4">
+                        <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Saldo remanente</p>
+                        <p className="mt-2 text-2xl font-semibold text-brand-navy">{formatCurrency(budgetSimulation.remainingBudget)}</p>
+                        <p className="mt-1 text-sm text-slate-500">Despues de cubrir las prioridades</p>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 rounded-2xl bg-brand-mist p-4 text-sm text-slate-600">
+                      <p><span className="font-semibold text-brand-navy">Comunas cubiertas:</span> {budgetSimulation.coveredCommunes.join(', ') || 'Sin cobertura simulada'}</p>
+                      <p className="mt-2"><span className="font-semibold text-brand-navy">Comunas fuera:</span> {budgetSimulation.uncoveredCommunes.join(', ') || 'Ninguna'}</p>
+                    </div>
+                  </div>
+
+                  <div className="rounded-[1.75rem] bg-[linear-gradient(135deg,rgba(37,48,107,0.95)_0%,rgba(44,61,158,0.88)_100%)] p-5 text-white">
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/70">Lectura ejecutiva</p>
+                    <p className="mt-3 text-sm leading-7 text-white/80">
+                      Bajo la estrategia <span className="font-semibold text-white">{getStrategyLabel(strategy)}</span>, el sistema prioriza
+                      {showPendingOnly ? ' escuelas pendientes del ano activo' : ' el universo completo filtrado'} y estima una cobertura de
+                      <span className="font-semibold text-white"> {formatPercent(strategicMetrics.coverageRate)}</span> para {effectivePlanningYear}.
+                    </p>
+                    <p className="mt-4 text-sm leading-7 text-white/80">
+                      La comuna con menor cobertura observada es <span className="font-semibold text-white">{strategicMetrics.weakestCommune?.name || 'Sin dato'}</span>.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </SectionCard>
+
+            <SectionCard
               title="Panel de control"
               description="Filtra la base y explora el comportamiento general del PME por establecimiento."
             >
@@ -250,6 +508,89 @@ export default function App() {
                 onDimensionChange={setDimension}
                 dimensions={dimensions}
               />
+            </SectionCard>
+
+            <SectionCard
+              title="Brechas territoriales"
+              description="Lectura estrategica de cobertura por comuna, ruralidad y territorios mas rezagados."
+            >
+              <div className="grid gap-8 xl:grid-cols-[1.1fr_0.9fr]">
+                <div className="space-y-6">
+                  <div className="rounded-[1.75rem] border border-brand-mist bg-white p-4 shadow-sm">
+                    <div className="mb-3">
+                      <p className="text-sm font-semibold text-brand-navy">Brecha por comuna</p>
+                      <p className="text-sm text-slate-500">Comparacion entre cobertura actual y escuelas pendientes del ano {effectivePlanningYear}.</p>
+                    </div>
+                    <div className="h-72">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={strategicMetrics.communeCoverage} margin={{ top: 10, right: 10, bottom: 25, left: 0 }}>
+                          <CartesianGrid vertical={false} stroke="#d7ddea" />
+                          <XAxis dataKey="name" angle={-18} textAnchor="end" interval={0} height={70} tick={{ fontSize: 12 }} />
+                          <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
+                          <Tooltip />
+                          <Bar dataKey="withOuting" name="Con salida" radius={[10, 10, 0, 0]} fill="#25306B" />
+                          <Bar dataKey="withoutOuting" name="Pendientes" radius={[10, 10, 0, 0]} fill="#FF1D3D" />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+
+                  <div className="rounded-[1.75rem] border border-brand-mist bg-white p-4 shadow-sm">
+                    <div className="mb-3">
+                      <p className="text-sm font-semibold text-brand-navy">Brecha por ruralidad</p>
+                      <p className="text-sm text-slate-500">Mide si la asignacion actual esta dejando rezagadas zonas rurales.</p>
+                    </div>
+                    <div className="h-64">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={strategicMetrics.ruralityCoverage} margin={{ top: 10, right: 10, bottom: 0, left: 0 }}>
+                          <CartesianGrid vertical={false} stroke="#d7ddea" />
+                          <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+                          <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
+                          <Tooltip />
+                          <Bar dataKey="withOuting" name="Con salida" radius={[10, 10, 0, 0]} fill="#006BB9" />
+                          <Bar dataKey="withoutOuting" name="Pendientes" radius={[10, 10, 0, 0]} fill="#FF1D3D" />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-[1.75rem] bg-[linear-gradient(180deg,#f7f9fc_0%,#edf0f5_100%)] p-4">
+                  <div className="mb-4">
+                    <p className="text-sm font-semibold text-brand-navy">Radar territorial</p>
+                    <p className="text-sm text-slate-500">Resumen por comuna para identificar donde conviene concentrar presupuesto y cupos.</p>
+                  </div>
+                  <div className="grid gap-3">
+                    {strategicMetrics.territorialSummary.map((item) => (
+                      <div key={item.name} className="rounded-2xl bg-white p-4 shadow-sm">
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <p className="font-semibold text-slate-900">{item.name}</p>
+                            <p className="mt-1 text-sm text-slate-500">{formatPercent(item.coverageRate)} de cobertura</p>
+                          </div>
+                          <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+                            {formatNumber(item.total)} escuelas
+                          </span>
+                        </div>
+                        <div className="mt-3 grid grid-cols-3 gap-2 text-sm">
+                          <div className="rounded-2xl bg-slate-50 px-3 py-2">
+                            <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Pendientes</p>
+                            <p className="mt-1 font-semibold text-brand-red">{formatNumber(item.withoutOuting)}</p>
+                          </div>
+                          <div className="rounded-2xl bg-slate-50 px-3 py-2">
+                            <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Con salida</p>
+                            <p className="mt-1 font-semibold text-brand-navy">{formatNumber(item.withOuting)}</p>
+                          </div>
+                          <div className="rounded-2xl bg-slate-50 px-3 py-2">
+                            <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Monto</p>
+                            <p className="mt-1 font-semibold text-slate-700">{formatCurrency(item.estimatedBudget)}</p>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
             </SectionCard>
 
             <section className="grid gap-8 xl:grid-cols-[1.15fr_0.85fr]">
@@ -372,13 +713,23 @@ export default function App() {
               title="Panel de detalles"
               description="Tabla operativa con lectura rápida por establecimiento. Abre el modal para revisar el cruce completo entre ANALISIS y ESTABLECIMIENTOS."
             >
-              <EstablishmentTable items={filteredItems} onOpen={setSelectedItem} />
+              <EstablishmentTable
+                items={filteredItems}
+                onOpen={setSelectedItem}
+                strategicMap={strategicMap}
+              />
             </SectionCard>
           </div>
         ) : null}
       </div>
 
-      <EstablishmentModal item={selectedItem} onClose={() => setSelectedItem(null)} />
+      <EstablishmentModal
+        item={selectedItem}
+        strategicProfile={selectedItem?.rbd ? strategicMap[selectedItem.rbd] : null}
+        planningYear={effectivePlanningYear}
+        strategyLabel={getStrategyLabel(strategy)}
+        onClose={() => setSelectedItem(null)}
+      />
     </div>
   );
 }

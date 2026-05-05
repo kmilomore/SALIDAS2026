@@ -9,11 +9,13 @@ function normalizeText(value) {
     .toLowerCase();
 }
 
-export default function EstablishmentTable({ items, onOpen }) {
+export default function EstablishmentTable({ items, onOpen, strategicMap = {} }) {
   const [schoolFilter, setSchoolFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [yearFilter, setYearFilter] = useState('all');
   const [actionsFilter, setActionsFilter] = useState('all');
+  const [sortBy, setSortBy] = useState('priority');
+  const [sortDirection, setSortDirection] = useState('desc');
 
   const yearOptions = useMemo(
     () => [...new Set(items.map((item) => item.year).filter(Boolean))].sort(),
@@ -26,10 +28,15 @@ export default function EstablishmentTable({ items, onOpen }) {
     [items],
   );
 
+  const itemsWithProfiles = useMemo(
+    () => items.map((item) => ({ ...item, strategicProfile: strategicMap[item.rbd] || null })),
+    [items, strategicMap],
+  );
+
   const filteredItems = useMemo(() => {
     const normalizedSchoolFilter = normalizeText(schoolFilter);
 
-    return items.filter((item) => {
+    return itemsWithProfiles.filter((item) => {
       const matchesSchool = !normalizedSchoolFilter
         || normalizeText(item.name).includes(normalizedSchoolFilter)
         || normalizeText(item.rbd).includes(normalizedSchoolFilter);
@@ -43,7 +50,50 @@ export default function EstablishmentTable({ items, onOpen }) {
 
       return matchesSchool && matchesStatus && matchesYear && matchesActions;
     });
-  }, [actionsFilter, items, schoolFilter, statusFilter, yearFilter]);
+  }, [actionsFilter, itemsWithProfiles, schoolFilter, statusFilter, yearFilter]);
+
+  const sortedItems = useMemo(() => {
+    const direction = sortDirection === 'asc' ? 1 : -1;
+    const priorityOrder = { Alta: 3, Media: 2, Baja: 1 };
+
+    return [...filteredItems].sort((left, right) => {
+      const leftProfile = left.strategicProfile || {};
+      const rightProfile = right.strategicProfile || {};
+
+      let comparison = 0;
+
+      switch (sortBy) {
+        case 'score':
+          comparison = (leftProfile.score || 0) - (rightProfile.score || 0);
+          break;
+        case 'budget':
+          comparison = (left.estimatedBudget || 0) - (right.estimatedBudget || 0);
+          break;
+        case 'actions':
+          comparison = (left.actionCount || 0) - (right.actionCount || 0);
+          break;
+        case 'commune':
+          comparison = String(left.commune || '').localeCompare(String(right.commune || ''), 'es');
+          break;
+        case 'status':
+          comparison = Number(left.hasPedagogicalOuting) - Number(right.hasPedagogicalOuting);
+          break;
+        case 'priority':
+        default:
+          comparison = (priorityOrder[leftProfile.priority] || 0) - (priorityOrder[rightProfile.priority] || 0);
+          if (comparison === 0) {
+            comparison = (leftProfile.score || 0) - (rightProfile.score || 0);
+          }
+          break;
+      }
+
+      if (comparison === 0) {
+        comparison = String(left.name || '').localeCompare(String(right.name || ''), 'es');
+      }
+
+      return comparison * direction;
+    });
+  }, [filteredItems, sortBy, sortDirection]);
 
   if (!items.length) {
     return (
@@ -65,14 +115,14 @@ export default function EstablishmentTable({ items, onOpen }) {
           <h3 className="mt-1 text-lg font-semibold text-slate-900">Tabla de establecimientos</h3>
         </div>
         <div className="flex flex-wrap gap-2 text-xs font-medium text-slate-600">
-          <span className="rounded-full bg-slate-100 px-3 py-1">{formatNumber(filteredItems.length)} registros visibles</span>
+          <span className="rounded-full bg-slate-100 px-3 py-1">{formatNumber(sortedItems.length)} registros visibles</span>
           <span className="rounded-full bg-emerald-50 px-3 py-1 text-emerald-700">
-            {formatNumber(filteredItems.filter((item) => item.hasPedagogicalOuting).length)} con salida
+            {formatNumber(sortedItems.filter((item) => item.hasPedagogicalOuting).length)} con salida
           </span>
         </div>
       </div>
 
-      <div className="grid gap-4 border-b border-slate-100 bg-slate-50/70 px-5 py-4 lg:grid-cols-4">
+      <div className="grid gap-4 border-b border-slate-100 bg-slate-50/70 px-5 py-4 lg:grid-cols-6">
         <label className="flex flex-col gap-2">
           <span className="text-sm font-medium text-slate-700">Escuela o RBD</span>
           <input
@@ -127,6 +177,34 @@ export default function EstablishmentTable({ items, onOpen }) {
             ))}
           </select>
         </label>
+
+        <label className="flex flex-col gap-2">
+          <span className="text-sm font-medium text-slate-700">Ordenar por</span>
+          <select
+            className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-brand-blue focus:ring-4 focus:ring-brand-blue/10"
+            value={sortBy}
+            onChange={(event) => setSortBy(event.target.value)}
+          >
+            <option value="priority">Prioridad</option>
+            <option value="score">Score</option>
+            <option value="budget">Monto</option>
+            <option value="actions">Acciones</option>
+            <option value="commune">Comuna</option>
+            <option value="status">Estado</option>
+          </select>
+        </label>
+
+        <label className="flex flex-col gap-2">
+          <span className="text-sm font-medium text-slate-700">Direccion</span>
+          <select
+            className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-brand-blue focus:ring-4 focus:ring-brand-blue/10"
+            value={sortDirection}
+            onChange={(event) => setSortDirection(event.target.value)}
+          >
+            <option value="desc">Mayor a menor</option>
+            <option value="asc">Menor a mayor</option>
+          </select>
+        </label>
       </div>
 
       <div className="overflow-x-auto">
@@ -146,6 +224,12 @@ export default function EstablishmentTable({ items, onOpen }) {
                 Estado
               </th>
               <th className="sticky top-0 z-10 border-b border-slate-200 bg-slate-50 px-4 py-4 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                Prioridad
+              </th>
+              <th className="sticky top-0 z-10 border-b border-slate-200 bg-slate-50 px-4 py-4 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                Score
+              </th>
+              <th className="sticky top-0 z-10 border-b border-slate-200 bg-slate-50 px-4 py-4 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
                 Año
               </th>
               <th className="sticky top-0 z-10 border-b border-slate-200 bg-slate-50 px-4 py-4 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
@@ -157,6 +241,12 @@ export default function EstablishmentTable({ items, onOpen }) {
               <th className="sticky top-0 z-10 border-b border-slate-200 bg-slate-50 px-4 py-4 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
                 Observación
               </th>
+              <th className="sticky top-0 z-10 border-b border-slate-200 bg-slate-50 px-4 py-4 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                Motivo
+              </th>
+              <th className="sticky top-0 z-10 border-b border-slate-200 bg-slate-50 px-4 py-4 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                Recomendación
+              </th>
               <th className="sticky top-0 z-10 border-b border-slate-200 bg-slate-50 px-4 py-4 text-right text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
                 Ver
               </th>
@@ -164,7 +254,7 @@ export default function EstablishmentTable({ items, onOpen }) {
           </thead>
 
           <tbody>
-            {filteredItems.map((item, index) => (
+            {sortedItems.map((item, index) => (
               <tr
                 key={`${item.rbd}-${item.year}-${index}`}
                 className={`group transition hover:bg-sky-50/60 ${index % 2 === 0 ? 'bg-white' : 'bg-slate-50/45'}`}
@@ -204,6 +294,22 @@ export default function EstablishmentTable({ items, onOpen }) {
                   </span>
                 </td>
                 <td className="border-b border-slate-100 px-4 py-4 align-top">
+                  <span
+                    className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
+                      item.strategicProfile?.priority === 'Alta'
+                        ? 'bg-red-100 text-red-700'
+                        : item.strategicProfile?.priority === 'Media'
+                          ? 'bg-amber-100 text-amber-700'
+                          : 'bg-slate-100 text-slate-700'
+                    }`}
+                  >
+                    {item.strategicProfile?.priority || 'Sin dato'}
+                  </span>
+                </td>
+                <td className="border-b border-slate-100 px-4 py-4 align-top text-sm font-semibold text-brand-navy">
+                  {formatNumber(item.strategicProfile?.score || 0)}
+                </td>
+                <td className="border-b border-slate-100 px-4 py-4 align-top">
                   <span className="inline-flex rounded-full bg-brand-mist px-3 py-1 text-xs font-semibold text-brand-navy">
                     {compactText(item.year, 'Sin año')}
                   </span>
@@ -218,6 +324,16 @@ export default function EstablishmentTable({ items, onOpen }) {
                   <div className="max-w-sm">
                     <span className="line-clamp-3">{compactText(item.observation)}</span>
                   </div>
+                </td>
+                <td className="border-b border-slate-100 px-4 py-4 align-top text-sm text-slate-500">
+                  <div className="max-w-[12rem]">
+                    <span className="line-clamp-3">{compactText(item.strategicProfile?.reasons?.[0], 'Sin motivo estrategico')}</span>
+                  </div>
+                </td>
+                <td className="border-b border-slate-100 px-4 py-4 align-top">
+                  <span className="inline-flex rounded-full bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-700">
+                    {compactText(item.strategicProfile?.recommendation, 'Sin recomendacion')}
+                  </span>
                 </td>
                 <td className="border-b border-slate-100 px-4 py-4 align-top text-right">
                   <button
@@ -234,7 +350,7 @@ export default function EstablishmentTable({ items, onOpen }) {
           </tbody>
         </table>
 
-        {!filteredItems.length ? (
+        {!sortedItems.length ? (
           <div className="border-t border-slate-100 px-6 py-10 text-center text-slate-500">
             <p className="text-base font-medium text-slate-700">No hay resultados para los filtros del panel de detalles.</p>
             <p className="mt-2 text-sm text-slate-500">Ajusta escuela, estado, año o acciones para volver a mostrar registros.</p>

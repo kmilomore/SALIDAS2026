@@ -1,0 +1,319 @@
+function normalizeText(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
+}
+
+function normalizeRurality(value) {
+  const normalized = normalizeText(value);
+
+  if (!normalized) {
+    return 'Sin dato';
+  }
+
+  if (normalized.includes('rural')) {
+    return 'Rural';
+  }
+
+  if (normalized.includes('urb')) {
+    return 'Urbano';
+  }
+
+  return 'Sin dato';
+}
+
+function clamp(value, min, max) {
+  return Math.min(Math.max(value, min), max);
+}
+
+function getPriorityLabel(score) {
+  if (score >= 70) {
+    return 'Alta';
+  }
+
+  if (score >= 45) {
+    return 'Media';
+  }
+
+  return 'Baja';
+}
+
+function buildRecommendation(profile) {
+  if (!profile.hasPlanningYearRecord) {
+    return 'Falta dato para decidir';
+  }
+
+  if (!profile.pendingThisYear && profile.score < 55) {
+    return 'Postergar';
+  }
+
+  if (profile.pendingThisYear && profile.estimatedBudgetForPlanningYear > 0 && profile.score >= 65) {
+    return 'Asignar este año';
+  }
+
+  if (profile.pendingThisYear && profile.estimatedBudgetForPlanningYear === 0) {
+    return 'Revisar por monto';
+  }
+
+  if (profile.score >= 50) {
+    return 'Revisar por monto';
+  }
+
+  return 'Postergar';
+}
+
+function scoreProfile(profile, context, strategy) {
+  const communeCoverage = context.communes[profile.commune] || { coverageRate: 0 };
+  const ruralCoverage = context.ruralities[profile.ruralityGroup] || { coverageRate: 0 };
+  const normalizedBudget = context.maxBudget > 0
+    ? 1 - clamp(profile.estimatedBudgetForPlanningYear / context.maxBudget, 0, 1)
+    : 0.5;
+  const normalizedActions = clamp(profile.actionsForPlanningYear / 8, 0, 1);
+  const missingRecordPenalty = profile.hasPlanningYearRecord ? 0 : -8;
+  const pendingScore = profile.pendingThisYear ? 30 : 6;
+  const ruralScore = profile.ruralityGroup === 'Rural' ? 14 : 4;
+  const communeGapScore = (1 - communeCoverage.coverageRate) * 18;
+  const ruralGapScore = (1 - ruralCoverage.coverageRate) * 12;
+  const actionsScore = normalizedActions * 18;
+  const budgetEfficiencyScore = normalizedBudget * 14;
+
+  const strategyWeights = {
+    coverage: { pending: 1.15, rural: 0.8, communeGap: 1, ruralGap: 0.8, actions: 0.8, budget: 1.45 },
+    rural: { pending: 1.05, rural: 1.8, communeGap: 0.9, ruralGap: 1.5, actions: 0.75, budget: 0.9 },
+    balance: { pending: 1.05, rural: 1, communeGap: 1.8, ruralGap: 1.1, actions: 0.8, budget: 0.9 },
+    need: { pending: 1.35, rural: 1, communeGap: 1.15, ruralGap: 1, actions: 1.45, budget: 0.7 },
+    lowBudget: { pending: 1.1, rural: 0.85, communeGap: 1, ruralGap: 0.9, actions: 0.75, budget: 1.75 },
+  };
+
+  const weights = strategyWeights[strategy] || strategyWeights.coverage;
+  const score = clamp(
+    pendingScore * weights.pending
+      + ruralScore * weights.rural
+      + communeGapScore * weights.communeGap
+      + ruralGapScore * weights.ruralGap
+      + actionsScore * weights.actions
+      + budgetEfficiencyScore * weights.budget
+      + missingRecordPenalty,
+    0,
+    100,
+  );
+
+  const reasons = [];
+
+  if (profile.pendingThisYear) {
+    reasons.push('Pendiente del ano en planificacion');
+  }
+
+  if (profile.ruralityGroup === 'Rural') {
+    reasons.push('Prioridad territorial rural');
+  }
+
+  if (communeCoverage.coverageRate < 0.5) {
+    reasons.push('Comuna con baja cobertura');
+  }
+
+  if (profile.actionsForPlanningYear >= 3) {
+    reasons.push('Alta intensidad de acciones');
+  }
+
+  if (profile.estimatedBudgetForPlanningYear > 0 && normalizedBudget > 0.55) {
+    reasons.push('Buena relacion cobertura/monto');
+  }
+
+  if (!profile.hasPlanningYearRecord) {
+    reasons.push('Sin registro del ano activo');
+  }
+
+  return {
+    score: Math.round(score),
+    priority: getPriorityLabel(score),
+    reasons: reasons.slice(0, 3),
+  };
+}
+
+export function resolvePlanningYear(years, selectedYear) {
+  if (selectedYear && selectedYear !== 'auto') {
+    return selectedYear;
+  }
+
+  const numericYears = (years || []).filter((item) => /^20\d{2}$/.test(String(item))).sort();
+
+  if (numericYears.length) {
+    return numericYears[numericYears.length - 1];
+  }
+
+  return (years || [])[0] || 'Sin año';
+}
+
+export function buildStrategicProfiles(records, planningYear, strategy = 'coverage') {
+  const buckets = new Map();
+
+  (records || []).forEach((item) => {
+    if (!item?.rbd) {
+      return;
+    }
+
+    const existing = buckets.get(item.rbd) || {
+      rbd: item.rbd,
+      name: item.name,
+      commune: item.commune || 'Sin dato',
+      dependency: item.dependency || 'Sin dato',
+      level: item.level || 'Sin dato',
+      area: item.area || 'Sin dato',
+      rurality: item.rurality || 'Sin dato',
+      ruralityGroup: normalizeRurality(item.rurality),
+      dimensions: new Set(),
+      totalActions: 0,
+      totalBudget: 0,
+      totalRecords: 0,
+      actionsForPlanningYear: 0,
+      estimatedBudgetForPlanningYear: 0,
+      hasPlanningYearRecord: false,
+      hasOutingThisYear: false,
+      hasOutingAnyYear: false,
+      records: [],
+    };
+
+    item.dimensions.forEach((dimension) => existing.dimensions.add(dimension));
+    existing.totalActions += Number(item.actionCount) || 0;
+    existing.totalBudget += Number(item.estimatedBudget) || 0;
+    existing.totalRecords += 1;
+    existing.hasOutingAnyYear = existing.hasOutingAnyYear || Boolean(item.hasPedagogicalOuting);
+    existing.records.push(item);
+
+    if (item.year === planningYear) {
+      existing.hasPlanningYearRecord = true;
+      existing.hasOutingThisYear = existing.hasOutingThisYear || Boolean(item.hasPedagogicalOuting);
+      existing.actionsForPlanningYear += Number(item.actionCount) || 0;
+      existing.estimatedBudgetForPlanningYear += Number(item.estimatedBudget) || 0;
+    }
+
+    buckets.set(item.rbd, existing);
+  });
+
+  const profiles = [...buckets.values()].map((item) => ({
+    ...item,
+    dimensions: [...item.dimensions].sort(),
+    pendingThisYear: item.hasPlanningYearRecord ? !item.hasOutingThisYear : true,
+  }));
+
+  const communeBuckets = {};
+  const ruralityBuckets = {};
+  let maxBudget = 0;
+
+  profiles.forEach((profile) => {
+    const communeKey = profile.commune || 'Sin dato';
+    const ruralityKey = profile.ruralityGroup;
+
+    if (!communeBuckets[communeKey]) {
+      communeBuckets[communeKey] = { total: 0, withOuting: 0, withoutOuting: 0, estimatedBudget: 0 };
+    }
+
+    if (!ruralityBuckets[ruralityKey]) {
+      ruralityBuckets[ruralityKey] = { total: 0, withOuting: 0, withoutOuting: 0, estimatedBudget: 0 };
+    }
+
+    communeBuckets[communeKey].total += 1;
+    ruralityBuckets[ruralityKey].total += 1;
+
+    if (profile.pendingThisYear) {
+      communeBuckets[communeKey].withoutOuting += 1;
+      ruralityBuckets[ruralityKey].withoutOuting += 1;
+    } else {
+      communeBuckets[communeKey].withOuting += 1;
+      ruralityBuckets[ruralityKey].withOuting += 1;
+    }
+
+    communeBuckets[communeKey].estimatedBudget += profile.estimatedBudgetForPlanningYear;
+    ruralityBuckets[ruralityKey].estimatedBudget += profile.estimatedBudgetForPlanningYear;
+    maxBudget = Math.max(maxBudget, profile.estimatedBudgetForPlanningYear);
+  });
+
+  Object.values(communeBuckets).forEach((bucket) => {
+    bucket.coverageRate = bucket.total ? bucket.withOuting / bucket.total : 0;
+  });
+
+  Object.values(ruralityBuckets).forEach((bucket) => {
+    bucket.coverageRate = bucket.total ? bucket.withOuting / bucket.total : 0;
+  });
+
+  const context = {
+    communes: communeBuckets,
+    ruralities: ruralityBuckets,
+    maxBudget,
+  };
+
+  const scoredProfiles = profiles
+    .map((profile) => {
+      const scoring = scoreProfile(profile, context, strategy);
+      const enriched = {
+        ...profile,
+        ...scoring,
+      };
+
+      return {
+        ...enriched,
+        recommendation: buildRecommendation(enriched),
+      };
+    })
+    .sort((left, right) => right.score - left.score || right.actionsForPlanningYear - left.actionsForPlanningYear);
+
+  return {
+    profiles: scoredProfiles,
+    communeCoverage: Object.entries(communeBuckets)
+      .map(([name, bucket]) => ({ name, ...bucket }))
+      .sort((left, right) => (left.coverageRate - right.coverageRate) || (right.withoutOuting - left.withoutOuting)),
+    ruralityCoverage: Object.entries(ruralityBuckets)
+      .map(([name, bucket]) => ({ name, ...bucket }))
+      .sort((left, right) => left.coverageRate - right.coverageRate),
+  };
+}
+
+export function buildBudgetSimulation(profiles, budgetAmount) {
+  const budget = Number(budgetAmount) || 0;
+  const recommended = (profiles || []).filter((item) => item.pendingThisYear).sort((left, right) => right.score - left.score);
+  let remaining = budget;
+  const covered = [];
+  const uncovered = [];
+
+  recommended.forEach((profile) => {
+    const cost = Number(profile.estimatedBudgetForPlanningYear) || 0;
+
+    if (cost <= remaining) {
+      covered.push(profile);
+      remaining -= cost;
+      return;
+    }
+
+    uncovered.push(profile);
+  });
+
+  const coveredCommunes = [...new Set(covered.map((item) => item.commune))].filter(Boolean);
+  const uncoveredCommunes = [...new Set(uncovered.map((item) => item.commune))].filter(Boolean);
+
+  return {
+    inputBudget: budget,
+    coveredCount: covered.length,
+    uncoveredCount: uncovered.length,
+    coveredBudget: budget - remaining,
+    remainingBudget: remaining,
+    coveredCommunes,
+    uncoveredCommunes,
+    covered,
+    uncovered,
+  };
+}
+
+export function getStrategyLabel(strategy) {
+  const labels = {
+    coverage: 'Maximizar cobertura',
+    rural: 'Priorizar rurales',
+    balance: 'Equilibrar comunas',
+    need: 'Priorizar mayor necesidad',
+    lowBudget: 'Priorizar menor inversion previa',
+  };
+
+  return labels[strategy] || labels.coverage;
+}
