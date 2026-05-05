@@ -29,6 +29,7 @@ function buildDashboardPayload() {
 
   var establishmentsMap = {};
   var covered2025Map = {};
+  var covered2025CountMap = {};
 
   establishmentRows.forEach(function(row) {
     var rbd = normalizeRbd(firstFilledValue(row) || row.rbd || row.codigo_rbd || row.cod_rbd);
@@ -49,6 +50,7 @@ function buildDashboardPayload() {
 
     getRbdLookupKeys(rbd).forEach(function(key) {
       covered2025Map[key] = true;
+      covered2025CountMap[key] = (covered2025CountMap[key] || 0) + 1;
     });
   });
 
@@ -87,6 +89,7 @@ function buildDashboardPayload() {
         rurality: pickFirst(establishment, ['ruralidad', 'rural', 'urbano_rural', 'rural_urbano']) || 'Sin dato',
         year: year,
         wasCovered2025: hasRbdLookupMatch(covered2025Map, rawRbd),
+        covered2025Count: getRbdLookupCount(covered2025CountMap, rawRbd),
         hasPedagogicalOuting: hasPedagogicalOuting,
         actionCount: actionCount,
         dimensions: dimensions,
@@ -259,6 +262,11 @@ function findByRbdLookup(source, value) {
 
 function hasRbdLookupMatch(source, value) {
   return Boolean(findByRbdLookup(source, value));
+}
+
+function getRbdLookupCount(source, value) {
+  var match = findByRbdLookup(source, value);
+  return match ? Number(match) || 0 : 0;
 }
 
 function firstFilledValue(row) {

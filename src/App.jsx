@@ -204,21 +204,20 @@ export default function App() {
     const pending2025 = requested2025.filter((item) => !item.wasCovered2025);
     const schools2025Map = new Map();
 
-    requested2025.forEach((item) => {
-      const current = schools2025Map.get(item.rbd) || {
+    (data?.establishments || []).forEach((item) => {
+      const covered2025Count = Number(item.covered2025Count) || 0;
+
+      if (!item.rbd || covered2025Count <= 0 || schools2025Map.has(item.rbd)) {
+        return;
+      }
+
+      schools2025Map.set(item.rbd, {
         rbd: item.rbd,
         name: item.name,
         commune: item.commune,
-        outings: 0,
-        requested: false,
-        concreted: false,
-      };
-
-      current.outings += 1;
-      current.requested = true;
-      current.concreted = current.concreted || Boolean(item.wasCovered2025);
-
-      schools2025Map.set(item.rbd, current);
+        outings: covered2025Count,
+        status: 'Registrada en 2025',
+      });
     });
 
     const pme2025SummaryChart = [
@@ -239,7 +238,7 @@ export default function App() {
         name: item.name,
         commune: item.commune,
         outings: item.outings,
-        status: item.concreted ? 'Concretada' : 'No concretada',
+        status: item.status,
       }));
 
     return {
@@ -436,7 +435,7 @@ export default function App() {
 
             <SectionCard
               title="Seguimiento de salidas 2025"
-              description="Compara lo solicitado en el PME 2025, lo efectivamente concretado y las escuelas con mayor cantidad de acciones declaradas en 2025."
+              description="Compara lo solicitado en el PME 2025, lo efectivamente concretado y las escuelas con más salidas registradas en la hoja 2025."
             >
               <div className="space-y-6">
                 <div className="rounded-[1.75rem] border border-brand-mist bg-white p-4 shadow-sm">
@@ -497,8 +496,8 @@ export default function App() {
 
                 <div className="rounded-[1.75rem] border border-brand-mist bg-white p-4 shadow-sm">
                   <div className="mb-3">
-                    <p className="text-sm font-semibold text-brand-navy">Escuelas con más salidas pedagógicas declaradas en 2025</p>
-                    <p className="text-sm text-slate-500">Top de establecimientos según cantidad de salidas pedagógicas declaradas en el PME 2025, con estado de concreción real.</p>
+                    <p className="text-sm font-semibold text-brand-navy">Escuelas con más salidas pedagógicas registradas en 2025</p>
+                    <p className="text-sm text-slate-500">Top de establecimientos según cuántas veces se repite su RBD en la hoja 2025. Cada repetición equivale a una salida pedagógica realizada.</p>
                   </div>
                   <div className="h-80">
                     <ResponsiveContainer width="100%" height="100%">
@@ -506,10 +505,10 @@ export default function App() {
                         <CartesianGrid horizontal={false} stroke="#d7ddea" />
                         <XAxis type="number" allowDecimals={false} tick={{ fontSize: 12 }} />
                         <YAxis dataKey="name" type="category" width={180} tick={{ fontSize: 12 }} />
-                        <Tooltip formatter={(value) => [formatNumber(value), 'Salidas pedagógicas 2025']} />
+                        <Tooltip formatter={(value) => [formatNumber(value), 'Salidas registradas en 2025']} />
                         <Bar dataKey="outings" radius={[0, 12, 12, 0]}>
                           {derivedMetrics.pme2025SchoolsChart.map((entry) => (
-                            <Cell key={`${entry.name}-${entry.status}`} fill={entry.status === 'Concretada' ? '#006BB9' : '#FF8A00'} />
+                            <Cell key={`${entry.name}-${entry.status}`} fill="#006BB9" />
                           ))}
                         </Bar>
                       </BarChart>
@@ -524,7 +523,7 @@ export default function App() {
                         </div>
                         <div className="text-right">
                           <p className="font-semibold text-brand-navy">{formatNumber(item.outings)} salidas</p>
-                          <p className={item.status === 'Concretada' ? 'text-xs text-sky-700' : 'text-xs text-amber-700'}>{item.status}</p>
+                          <p className="text-xs text-sky-700">{item.status}</p>
                         </div>
                       </div>
                     ))}
