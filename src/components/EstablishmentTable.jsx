@@ -1,7 +1,50 @@
+import { useMemo, useState } from 'react';
 import { ChevronRight, MapPin, School, SearchX } from 'lucide-react';
 import { compactText, formatCurrency, formatNumber } from '../lib/formatters';
 
+function normalizeText(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+}
+
 export default function EstablishmentTable({ items, onOpen }) {
+  const [schoolFilter, setSchoolFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [yearFilter, setYearFilter] = useState('all');
+  const [actionsFilter, setActionsFilter] = useState('all');
+
+  const yearOptions = useMemo(
+    () => [...new Set(items.map((item) => item.year).filter(Boolean))].sort(),
+    [items],
+  );
+
+  const actionOptions = useMemo(
+    () => [...new Set(items.map((item) => item.actionCount).filter((value) => value !== undefined && value !== null))]
+      .sort((left, right) => left - right),
+    [items],
+  );
+
+  const filteredItems = useMemo(() => {
+    const normalizedSchoolFilter = normalizeText(schoolFilter);
+
+    return items.filter((item) => {
+      const matchesSchool = !normalizedSchoolFilter
+        || normalizeText(item.name).includes(normalizedSchoolFilter)
+        || normalizeText(item.rbd).includes(normalizedSchoolFilter);
+
+      const matchesStatus = statusFilter === 'all'
+        || (statusFilter === 'with' && item.hasPedagogicalOuting)
+        || (statusFilter === 'without' && !item.hasPedagogicalOuting);
+
+      const matchesYear = yearFilter === 'all' || item.year === yearFilter;
+      const matchesActions = actionsFilter === 'all' || String(item.actionCount) === actionsFilter;
+
+      return matchesSchool && matchesStatus && matchesYear && matchesActions;
+    });
+  }, [actionsFilter, items, schoolFilter, statusFilter, yearFilter]);
+
   if (!items.length) {
     return (
       <div className="rounded-[2rem] border border-dashed border-slate-300 bg-[linear-gradient(180deg,#f8fafc_0%,#ffffff_100%)] p-10 text-center text-slate-500">
@@ -22,11 +65,68 @@ export default function EstablishmentTable({ items, onOpen }) {
           <h3 className="mt-1 text-lg font-semibold text-slate-900">Tabla de establecimientos</h3>
         </div>
         <div className="flex flex-wrap gap-2 text-xs font-medium text-slate-600">
-          <span className="rounded-full bg-slate-100 px-3 py-1">{formatNumber(items.length)} registros</span>
+          <span className="rounded-full bg-slate-100 px-3 py-1">{formatNumber(filteredItems.length)} registros visibles</span>
           <span className="rounded-full bg-emerald-50 px-3 py-1 text-emerald-700">
-            {formatNumber(items.filter((item) => item.hasPedagogicalOuting).length)} con salida
+            {formatNumber(filteredItems.filter((item) => item.hasPedagogicalOuting).length)} con salida
           </span>
         </div>
+      </div>
+
+      <div className="grid gap-4 border-b border-slate-100 bg-slate-50/70 px-5 py-4 lg:grid-cols-4">
+        <label className="flex flex-col gap-2">
+          <span className="text-sm font-medium text-slate-700">Escuela o RBD</span>
+          <input
+            className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-brand-blue focus:ring-4 focus:ring-brand-blue/10"
+            value={schoolFilter}
+            onChange={(event) => setSchoolFilter(event.target.value)}
+            placeholder="Buscar por nombre o RBD"
+          />
+        </label>
+
+        <label className="flex flex-col gap-2">
+          <span className="text-sm font-medium text-slate-700">Estado</span>
+          <select
+            className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-brand-blue focus:ring-4 focus:ring-brand-blue/10"
+            value={statusFilter}
+            onChange={(event) => setStatusFilter(event.target.value)}
+          >
+            <option value="all">Todos</option>
+            <option value="with">Con salida</option>
+            <option value="without">Sin salida</option>
+          </select>
+        </label>
+
+        <label className="flex flex-col gap-2">
+          <span className="text-sm font-medium text-slate-700">Año</span>
+          <select
+            className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-brand-blue focus:ring-4 focus:ring-brand-blue/10"
+            value={yearFilter}
+            onChange={(event) => setYearFilter(event.target.value)}
+          >
+            <option value="all">Todos</option>
+            {yearOptions.map((year) => (
+              <option key={year} value={year}>
+                {year}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="flex flex-col gap-2">
+          <span className="text-sm font-medium text-slate-700">Acciones</span>
+          <select
+            className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-brand-blue focus:ring-4 focus:ring-brand-blue/10"
+            value={actionsFilter}
+            onChange={(event) => setActionsFilter(event.target.value)}
+          >
+            <option value="all">Todas</option>
+            {actionOptions.map((actionCount) => (
+              <option key={actionCount} value={String(actionCount)}>
+                {formatNumber(actionCount)}
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
 
       <div className="overflow-x-auto">
@@ -64,9 +164,9 @@ export default function EstablishmentTable({ items, onOpen }) {
           </thead>
 
           <tbody>
-            {items.map((item, index) => (
+            {filteredItems.map((item, index) => (
               <tr
-                key={item.rbd}
+                key={`${item.rbd}-${item.year}-${index}`}
                 className={`group transition hover:bg-sky-50/60 ${index % 2 === 0 ? 'bg-white' : 'bg-slate-50/45'}`}
               >
                 <td className="border-b border-slate-100 px-5 py-4 align-top">
@@ -133,6 +233,13 @@ export default function EstablishmentTable({ items, onOpen }) {
             ))}
           </tbody>
         </table>
+
+        {!filteredItems.length ? (
+          <div className="border-t border-slate-100 px-6 py-10 text-center text-slate-500">
+            <p className="text-base font-medium text-slate-700">No hay resultados para los filtros del panel de detalles.</p>
+            <p className="mt-2 text-sm text-slate-500">Ajusta escuela, estado, año o acciones para volver a mostrar registros.</p>
+          </div>
+        ) : null}
       </div>
     </div>
   );
