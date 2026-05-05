@@ -11,23 +11,16 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { Activity, Building2, CircleDollarSign, RefreshCw, SlidersHorizontal, Target } from 'lucide-react';
+import { Activity, Building2, CircleDollarSign, RefreshCw } from 'lucide-react';
 import EstablishmentModal from './components/EstablishmentModal';
 import EstablishmentTable from './components/EstablishmentTable';
 import MetricCard from './components/MetricCard';
 import SectionCard from './components/SectionCard';
 import { fetchDashboardData } from './lib/api';
 import { formatCurrency, formatDate, formatNumber } from './lib/formatters';
-import { buildStrategicProfiles, getStrategyLabel, resolvePlanningYear } from './lib/strategic';
+import { buildStrategicProfiles, resolvePlanningYear } from './lib/strategic';
 
 const PIE_COLORS = ['#25306B', '#006BB9', '#FF1D3D', '#EDF0F5'];
-const STRATEGY_OPTIONS = [
-  { value: 'coverage', label: 'Maximizar cobertura' },
-  { value: 'rural', label: 'Priorizar rurales' },
-  { value: 'balance', label: 'Equilibrar comunas' },
-  { value: 'need', label: 'Priorizar mayor necesidad' },
-  { value: 'lowBudget', label: 'Priorizar menor inversión previa' },
-];
 
 function formatPercent(value) {
   return `${Math.round((Number(value) || 0) * 100)}%`;
@@ -48,9 +41,6 @@ export default function App() {
   const [status, setStatus] = useState('all');
   const [year, setYear] = useState('all');
   const [dimension, setDimension] = useState('all');
-  const [strategy, setStrategy] = useState('coverage');
-  const [planningYear, setPlanningYear] = useState('auto');
-  const [showPendingOnly, setShowPendingOnly] = useState(true);
   const [selectedItem, setSelectedItem] = useState(null);
 
   useEffect(() => {
@@ -125,18 +115,18 @@ export default function App() {
   }, [data, dimension, search]);
 
   const effectivePlanningYear = useMemo(
-    () => resolvePlanningYear(years, planningYear === 'auto' ? (year === 'all' ? 'auto' : year) : planningYear),
-    [planningYear, year, years],
+    () => resolvePlanningYear(years, year === 'all' ? 'auto' : year),
+    [year, years],
   );
 
   const strategicModel = useMemo(
-    () => buildStrategicProfiles(strategicScopedItems, effectivePlanningYear, strategy),
-    [effectivePlanningYear, strategicScopedItems, strategy],
+    () => buildStrategicProfiles(strategicScopedItems, effectivePlanningYear, 'coverage'),
+    [effectivePlanningYear, strategicScopedItems],
   );
 
   const strategicProfiles = useMemo(
-    () => (showPendingOnly ? strategicModel.profiles.filter((item) => item.pendingThisYear) : strategicModel.profiles),
-    [showPendingOnly, strategicModel.profiles],
+    () => strategicModel.profiles.filter((item) => !item.wasCovered2025 && item.hasPmeResources),
+    [strategicModel.profiles],
   );
 
   const strategicMap = useMemo(
@@ -163,7 +153,7 @@ export default function App() {
       pendingBudget,
       coverageRate,
       weakestCommune,
-      topProfiles: strategicProfiles.slice(0, 10),
+      uncoveredProfiles: strategicProfiles,
       communeCoverage: strategicModel.communeCoverage.slice(0, 8),
       ruralityCoverage: strategicModel.ruralityCoverage,
       territorialSummary: strategicModel.communeCoverage.slice(0, 6),
@@ -310,17 +300,11 @@ export default function App() {
               />
             </section>
 
-            <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-2">
-              <MetricCard
-                title="Monto a distribuir"
-                value={formatCurrency(strategicMetrics.pendingBudget)}
-                helper="Gasto potencial sobre las escuelas que sí lo determinaron en su PME"
-                tone="sky"
-              />
+            <section className="grid gap-4 md:grid-cols-1 xl:grid-cols-1">
               <MetricCard
                 title="Criterio 2026"
                 value="Priorizar no cubiertas 2025"
-                helper="El simulador ordena primero las escuelas que no logramos cubrir en 2025"
+                helper="La priorización se apoya primero en la cobertura 2025 y luego en criterios territoriales"
                 tone="amber"
               />
             </section>
@@ -353,155 +337,52 @@ export default function App() {
             </section>
 
             <SectionCard
-              title="Prioridad 2026"
-              description="Ranking y criterios de priorización para definir qué escuelas abordar en 2026 a partir de la cobertura 2025 y el contexto territorial."
-              actions={
-                <div className="flex flex-wrap items-center gap-3">
-                  <label className="flex items-center gap-2 rounded-2xl bg-slate-50 px-3 py-2 text-sm text-slate-600">
-                    <Target size={16} />
-                    <span>Año activo</span>
-                    <select
-                      className="bg-transparent font-medium outline-none"
-                      value={planningYear}
-                      onChange={(event) => setPlanningYear(event.target.value)}
-                    >
-                      <option value="auto">Automático</option>
-                      {years.map((itemYear) => (
-                        <option key={itemYear} value={itemYear}>
-                          {itemYear}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-
-                  <label className="flex items-center gap-2 rounded-2xl bg-slate-50 px-3 py-2 text-sm text-slate-600">
-                    <SlidersHorizontal size={16} />
-                    <span>Estrategia</span>
-                    <select
-                      className="bg-transparent font-medium outline-none"
-                      value={strategy}
-                      onChange={(event) => setStrategy(event.target.value)}
-                    >
-                      {STRATEGY_OPTIONS.map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-
-                  <label className="flex items-center gap-2 rounded-2xl bg-slate-50 px-3 py-2 text-sm text-slate-600">
-                    <input
-                      type="checkbox"
-                      checked={showPendingOnly}
-                      onChange={(event) => setShowPendingOnly(event.target.checked)}
-                    />
-                    Solo tramitables pendientes
-                  </label>
-                </div>
-              }
+              title="Escuelas no cubiertas en 2025"
+              description="Listado simple de escuelas con recursos PME que no fueron abordadas en 2025."
             >
-              <div className="grid gap-8 xl:grid-cols-[1.15fr_0.85fr]">
-                <div className="overflow-hidden rounded-[1.75rem] border border-slate-200 bg-white">
-                  <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Ranking estrategico</p>
-                      <h3 className="mt-1 text-lg font-semibold text-brand-navy">Escuelas sugeridas para intervenir</h3>
-                    </div>
-                    <div className="text-right text-sm text-slate-500">
-                      <p>{getStrategyLabel(strategy)}</p>
-                      <p>{formatNumber(strategicProfiles.length)} escuelas evaluadas</p>
-                    </div>
+              <div className="overflow-hidden rounded-[1.75rem] border border-slate-200 bg-white">
+                <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Listado 2026</p>
+                    <h3 className="mt-1 text-lg font-semibold text-brand-navy">Escuelas no cubiertas en 2025</h3>
                   </div>
-
-                  <div className="overflow-x-auto">
-                    <table className="min-w-full border-separate border-spacing-0 text-sm">
-                      <thead>
-                        <tr className="bg-slate-50 text-left">
-                          <th className="px-4 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Escuela</th>
-                          <th className="px-4 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Comuna</th>
-                          <th className="px-4 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Prioridad</th>
-                          <th className="px-4 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Score</th>
-                          <th className="px-4 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Monto</th>
-                          <th className="px-4 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Cobertura 2025</th>
-                          <th className="px-4 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Motivo</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {strategicMetrics.topProfiles.map((item, index) => (
-                          <tr key={item.rbd} className={index % 2 === 0 ? 'bg-white' : 'bg-slate-50/60'}>
-                            <td className="border-b border-slate-100 px-4 py-3">
-                              <p className="font-semibold text-slate-900">{item.name}</p>
-                              <p className="mt-1 text-xs text-slate-500">RBD {item.rbd}</p>
-                            </td>
-                            <td className="border-b border-slate-100 px-4 py-3 text-slate-600">{item.commune}</td>
-                            <td className="border-b border-slate-100 px-4 py-3">
-                              <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
-                                item.priority === 'Alta'
-                                  ? 'bg-red-100 text-red-700'
-                                  : item.priority === 'Media'
-                                    ? 'bg-amber-100 text-amber-700'
-                                    : 'bg-slate-100 text-slate-700'
-                              }`}
-                              >
-                                {item.priority}
-                              </span>
-                            </td>
-                            <td className="border-b border-slate-100 px-4 py-3 font-semibold text-brand-navy">{formatNumber(item.score)}</td>
-                            <td className="border-b border-slate-100 px-4 py-3 text-slate-700">{formatCurrency(item.estimatedBudgetForPlanningYear)}</td>
-                            <td className="border-b border-slate-100 px-4 py-3">
-                              <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
-                                item.wasCovered2025 ? 'bg-slate-100 text-slate-700' : 'bg-emerald-100 text-emerald-700'
-                              }`}
-                              >
-                                {item.wasCovered2025 ? 'Cubierta' : 'No cubierta'}
-                              </span>
-                            </td>
-                            <td className="border-b border-slate-100 px-4 py-3 text-slate-500">{item.reasons[0] || 'Sin observación estratégica'}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                  <div className="text-right text-sm text-slate-500">
+                    <p>{formatNumber(strategicMetrics.notCovered2025Count)} escuelas</p>
+                    <p>Con recursos PME disponibles</p>
                   </div>
                 </div>
 
-                <div className="space-y-4">
-                  <div className="rounded-[1.75rem] border border-brand-mist bg-[linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)] p-5 shadow-sm">
-                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Criterios de prioridad 2026</p>
-                    <h3 className="mt-2 text-lg font-semibold text-brand-navy">Cómo se define la priorización</h3>
-                    <p className="mt-2 text-sm text-slate-500">
-                      La prioridad 2026 se calcula sin usar montos. El foco está en cobertura histórica y equidad territorial.
-                    </p>
-                    <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                      <div className="rounded-2xl bg-slate-50 p-4">
-                        <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Criterio principal</p>
-                        <p className="mt-2 text-base font-semibold text-brand-navy">Escuelas no cubiertas en 2025</p>
-                        <p className="mt-1 text-sm text-slate-500">Suben primero en el ranking para la planificación 2026.</p>
-                      </div>
-                      <div className="rounded-2xl bg-slate-50 p-4">
-                        <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Criterios complementarios</p>
-                        <p className="mt-2 text-base font-semibold text-brand-navy">Cobertura comunal, ruralidad y acciones</p>
-                        <p className="mt-1 text-sm text-slate-500">Se usan para desempatar y reforzar la priorización territorial.</p>
-                      </div>
-                    </div>
-
-                    <div className="mt-4 rounded-2xl bg-brand-mist p-4 text-sm text-slate-600">
-                      <p><span className="font-semibold text-brand-navy">No cubiertas 2025:</span> {formatNumber(strategicMetrics.notCovered2025Count)} escuelas priorizables.</p>
-                      <p className="mt-2"><span className="font-semibold text-brand-navy">Comuna más rezagada:</span> {strategicMetrics.weakestCommune?.name || 'Sin dato'}.</p>
-                    </div>
-                  </div>
-
-                  <div className="rounded-[1.75rem] bg-[linear-gradient(135deg,rgba(37,48,107,0.95)_0%,rgba(44,61,158,0.88)_100%)] p-5 text-white">
-                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/70">Lectura ejecutiva</p>
-                    <p className="mt-3 text-sm leading-7 text-white/80">
-                      Bajo la estrategia <span className="font-semibold text-white">{getStrategyLabel(strategy)}</span>, el sistema prioriza
-                      {showPendingOnly ? ' escuelas priorizables con recursos PME' : ' el universo completo filtrado'} y ordena primero las no cubiertas en 2025, estimando una cobertura de
-                      <span className="font-semibold text-white"> {formatPercent(strategicMetrics.coverageRate)}</span> dentro de la base con recursos PME para {effectivePlanningYear}.
-                    </p>
-                    <p className="mt-4 text-sm leading-7 text-white/80">
-                      La comuna con menor cobertura observada entre escuelas tramitables es <span className="font-semibold text-white">{strategicMetrics.weakestCommune?.name || 'Sin dato'}</span>.
-                    </p>
-                  </div>
+                <div className="overflow-x-auto">
+                  <table className="min-w-full border-separate border-spacing-0 text-sm">
+                    <thead>
+                      <tr className="bg-slate-50 text-left">
+                        <th className="px-4 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Escuela</th>
+                        <th className="px-4 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">RBD</th>
+                        <th className="px-4 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Comuna</th>
+                        <th className="px-4 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Año de referencia</th>
+                        <th className="px-4 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Acciones</th>
+                        <th className="px-4 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Motivo</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {strategicMetrics.uncoveredProfiles.length ? strategicMetrics.uncoveredProfiles.map((item, index) => (
+                        <tr key={item.rbd} className={index % 2 === 0 ? 'bg-white' : 'bg-slate-50/60'}>
+                          <td className="border-b border-slate-100 px-4 py-3 font-semibold text-slate-900">{item.name}</td>
+                          <td className="border-b border-slate-100 px-4 py-3 text-slate-600">{item.rbd}</td>
+                          <td className="border-b border-slate-100 px-4 py-3 text-slate-600">{item.commune}</td>
+                          <td className="border-b border-slate-100 px-4 py-3 text-slate-600">{item.referenceYear || effectivePlanningYear}</td>
+                          <td className="border-b border-slate-100 px-4 py-3 text-slate-600">{formatNumber(item.actionsForPlanningYear)}</td>
+                          <td className="border-b border-slate-100 px-4 py-3 text-slate-500">{item.reasons[0] || 'No cubierta en 2025'}</td>
+                        </tr>
+                      )) : (
+                        <tr>
+                          <td colSpan="6" className="px-4 py-8 text-center text-sm text-slate-500">
+                            No hay escuelas con recursos PME pendientes por listar fuera de la cobertura 2025.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
                 </div>
               </div>
             </SectionCard>
@@ -723,7 +604,7 @@ export default function App() {
         item={selectedItem}
         strategicProfile={selectedItem?.rbd ? strategicMap[selectedItem.rbd] : null}
         planningYear={effectivePlanningYear}
-        strategyLabel={getStrategyLabel(strategy)}
+        strategyLabel="Cobertura 2025"
         onClose={() => setSelectedItem(null)}
       />
     </div>
