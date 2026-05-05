@@ -312,19 +312,29 @@ export function buildBudgetSimulation(profiles, budgetAmount) {
     .filter((item) => item.pendingThisYear && item.hasPmeResources)
     .sort((left, right) => right.score - left.score);
   let remaining = budget;
+  let accumulated = 0;
   const covered = [];
   const uncovered = [];
 
-  recommended.forEach((profile) => {
+  recommended.forEach((profile, index) => {
     const cost = Number(profile.estimatedBudgetForPlanningYear) || 0;
 
     if (cost <= remaining) {
-      covered.push(profile);
+      accumulated += cost;
+      covered.push({
+        ...profile,
+        simulationOrder: covered.length + 1,
+        simulationAccumulatedBudget: accumulated,
+      });
       remaining -= cost;
       return;
     }
 
-    uncovered.push(profile);
+    uncovered.push({
+      ...profile,
+      simulationOrder: index + 1,
+      simulationAccumulatedBudget: accumulated,
+    });
   });
 
   const coveredCommunes = [...new Set(covered.map((item) => item.commune))].filter(Boolean);

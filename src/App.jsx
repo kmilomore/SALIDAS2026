@@ -572,31 +572,91 @@ export default function App() {
                       <p className="mt-2"><span className="font-semibold text-brand-navy">Comunas fuera:</span> {budgetSimulation.uncoveredCommunes.join(', ') || 'Ninguna'}</p>
                     </div>
 
-                    <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                      <div className="rounded-2xl border border-slate-200 bg-white p-4">
-                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Entran en el presupuesto</p>
-                        <div className="mt-3 space-y-2 text-sm text-slate-600">
-                          {budgetSimulation.covered.slice(0, 3).map((item) => (
-                            <div key={item.rbd} className="rounded-xl bg-slate-50 px-3 py-2">
-                              <p className="font-medium text-slate-800">{item.name}</p>
-                              <p className="text-xs text-slate-500">{item.commune} · {formatCurrency(item.estimatedBudgetForPlanningYear)}</p>
-                            </div>
-                          ))}
-                          {!budgetSimulation.covered.length ? <p>No hay escuelas cubiertas con el monto actual.</p> : null}
+                    <div className="mt-4 rounded-[1.5rem] border border-slate-200 bg-white p-4">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Escuelas que se pueden trabajar</p>
+                          <p className="mt-1 text-sm text-slate-500">Listado dinámico según el monto ingresado y el orden de prioridad actual.</p>
                         </div>
+                        <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
+                          {formatNumber(budgetSimulation.coveredCount)} seleccionadas
+                        </span>
                       </div>
 
-                      <div className="rounded-2xl border border-slate-200 bg-white p-4">
-                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Quedan fuera</p>
-                        <div className="mt-3 space-y-2 text-sm text-slate-600">
-                          {budgetSimulation.uncovered.slice(0, 3).map((item) => (
-                            <div key={item.rbd} className="rounded-xl bg-slate-50 px-3 py-2">
-                              <p className="font-medium text-slate-800">{item.name}</p>
-                              <p className="text-xs text-slate-500">{item.commune} · {formatCurrency(item.estimatedBudgetForPlanningYear)}</p>
-                            </div>
-                          ))}
-                          {!budgetSimulation.uncovered.length ? <p>Ninguna escuela queda fuera con el monto actual.</p> : null}
+                      <div className="mt-4 max-h-72 overflow-auto rounded-2xl border border-slate-100">
+                        {budgetSimulation.covered.length ? (
+                          <table className="min-w-full border-separate border-spacing-0 text-sm">
+                            <thead>
+                              <tr className="bg-slate-50 text-left">
+                                <th className="sticky top-0 bg-slate-50 px-4 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">#</th>
+                                <th className="sticky top-0 bg-slate-50 px-4 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Escuela</th>
+                                <th className="sticky top-0 bg-slate-50 px-4 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Comuna</th>
+                                <th className="sticky top-0 bg-slate-50 px-4 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Monto</th>
+                                <th className="sticky top-0 bg-slate-50 px-4 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Acumulado</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {budgetSimulation.covered.map((item, index) => (
+                                <tr key={`${item.rbd}-${item.simulationOrder}`} className={index % 2 === 0 ? 'bg-white' : 'bg-slate-50/60'}>
+                                  <td className="border-b border-slate-100 px-4 py-3 font-semibold text-brand-navy">{formatNumber(item.simulationOrder)}</td>
+                                  <td className="border-b border-slate-100 px-4 py-3">
+                                    <p className="font-medium text-slate-900">{item.name}</p>
+                                    <p className="mt-1 text-xs text-slate-500">RBD {item.rbd}</p>
+                                  </td>
+                                  <td className="border-b border-slate-100 px-4 py-3 text-slate-600">{item.commune}</td>
+                                  <td className="border-b border-slate-100 px-4 py-3 text-slate-700">{formatCurrency(item.estimatedBudgetForPlanningYear)}</td>
+                                  <td className="border-b border-slate-100 px-4 py-3 font-semibold text-emerald-700">{formatCurrency(item.simulationAccumulatedBudget)}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        ) : (
+                          <div className="px-4 py-8 text-center text-sm text-slate-500">
+                            Con el monto ingresado no entra ninguna escuela. Sube el presupuesto para que aparezcan establecimientos tramitables.
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="mt-4 rounded-[1.5rem] border border-slate-200 bg-white p-4">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Escuelas que quedan pendientes</p>
+                          <p className="mt-1 text-sm text-slate-500">No alcanzan a entrar dentro del monto actual.</p>
                         </div>
+                        <span className="rounded-full bg-red-50 px-3 py-1 text-xs font-semibold text-red-700">
+                          {formatNumber(budgetSimulation.uncoveredCount)} fuera
+                        </span>
+                      </div>
+
+                      <div className="mt-4 max-h-64 overflow-auto rounded-2xl border border-slate-100">
+                        {budgetSimulation.uncovered.length ? (
+                          <table className="min-w-full border-separate border-spacing-0 text-sm">
+                            <thead>
+                              <tr className="bg-slate-50 text-left">
+                                <th className="sticky top-0 bg-slate-50 px-4 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Escuela</th>
+                                <th className="sticky top-0 bg-slate-50 px-4 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Comuna</th>
+                                <th className="sticky top-0 bg-slate-50 px-4 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Monto</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {budgetSimulation.uncovered.map((item, index) => (
+                                <tr key={`${item.rbd}-${item.simulationOrder}-outside`} className={index % 2 === 0 ? 'bg-white' : 'bg-slate-50/60'}>
+                                  <td className="border-b border-slate-100 px-4 py-3">
+                                    <p className="font-medium text-slate-900">{item.name}</p>
+                                    <p className="mt-1 text-xs text-slate-500">RBD {item.rbd}</p>
+                                  </td>
+                                  <td className="border-b border-slate-100 px-4 py-3 text-slate-600">{item.commune}</td>
+                                  <td className="border-b border-slate-100 px-4 py-3 text-slate-700">{formatCurrency(item.estimatedBudgetForPlanningYear)}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        ) : (
+                          <div className="px-4 py-8 text-center text-sm text-slate-500">
+                            No quedan escuelas fuera. Con este monto puedes trabajar todo el grupo tramitable pendiente.
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
