@@ -198,6 +198,45 @@ export default function App() {
       };
     });
 
+    const records2025 = (data?.establishments || []).filter((item) => item.year === '2025');
+    const requested2025 = records2025.filter((item) => item.hasPedagogicalOuting);
+    const concreted2025 = requested2025.filter((item) => item.wasCovered2025);
+    const pending2025 = requested2025.filter((item) => !item.wasCovered2025);
+    const schools2025Map = new Map();
+
+    requested2025.forEach((item) => {
+      const current = schools2025Map.get(item.rbd) || {
+        rbd: item.rbd,
+        name: item.name,
+        commune: item.commune,
+        actions: 0,
+        requested: false,
+        concreted: false,
+      };
+
+      current.actions += Number(item.actionCount) || 0;
+      current.requested = true;
+      current.concreted = current.concreted || Boolean(item.wasCovered2025);
+
+      schools2025Map.set(item.rbd, current);
+    });
+
+    const pme2025SummaryChart = [
+      { name: 'Solicitado en PME 2025', value: new Set(requested2025.map((item) => item.rbd)).size },
+      { name: 'Concretado en 2025', value: new Set(concreted2025.map((item) => item.rbd)).size },
+      { name: 'No concretado en 2025', value: new Set(pending2025.map((item) => item.rbd)).size },
+    ];
+
+    const pme2025SchoolsChart = [...schools2025Map.values()]
+      .sort((left, right) => right.actions - left.actions || String(left.name || '').localeCompare(String(right.name || ''), 'es'))
+      .slice(0, 10)
+      .map((item) => ({
+        name: item.name,
+        commune: item.commune,
+        actions: item.actions,
+        status: item.concreted ? 'Concretada' : 'No concretada',
+      }));
+
     return {
       totalEstablishments,
       totalRecords,
@@ -207,6 +246,8 @@ export default function App() {
       dimensionChart,
       statusChart,
       yearChart,
+      pme2025SummaryChart,
+      pme2025SchoolsChart,
     };
   }, [data, filteredItems]);
 
@@ -383,6 +424,85 @@ export default function App() {
                       )}
                     </tbody>
                   </table>
+                </div>
+              </div>
+            </SectionCard>
+
+            <SectionCard
+              title="Seguimiento de salidas 2025"
+              description="Compara lo solicitado en el PME 2025, lo efectivamente concretado y las escuelas con mayor cantidad de acciones declaradas en 2025."
+            >
+              <div className="grid gap-8 xl:grid-cols-[1.05fr_0.95fr]">
+                <div className="space-y-6">
+                  <div className="rounded-[1.75rem] border border-brand-mist bg-white p-4 shadow-sm">
+                    <div className="mb-3">
+                      <p className="text-sm font-semibold text-brand-navy">Solicitado vs concretado en 2025</p>
+                      <p className="text-sm text-slate-500">Escuelas que declararon salida en su PME 2025 y cruce con la hoja de cobertura real 2025.</p>
+                    </div>
+                    <div className="h-72">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={derivedMetrics.pme2025SummaryChart} margin={{ top: 10, right: 10, bottom: 25, left: 0 }}>
+                          <CartesianGrid vertical={false} stroke="#d7ddea" />
+                          <XAxis dataKey="name" angle={-12} textAnchor="end" interval={0} height={70} tick={{ fontSize: 12 }} />
+                          <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
+                          <Tooltip />
+                          <Bar dataKey="value" radius={[12, 12, 0, 0]}>
+                            {derivedMetrics.pme2025SummaryChart.map((entry) => (
+                              <Cell
+                                key={entry.name}
+                                fill={entry.name === 'Concretado en 2025' ? '#006BB9' : entry.name === 'No concretado en 2025' ? '#FF1D3D' : '#25306B'}
+                              />
+                            ))}
+                          </Bar>
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+
+                  <div className="grid gap-4 md:grid-cols-3">
+                    {derivedMetrics.pme2025SummaryChart.map((item) => (
+                      <div key={item.name} className="rounded-[1.5rem] border border-slate-200 bg-slate-50 p-4">
+                        <p className="text-xs uppercase tracking-[0.18em] text-slate-400">{item.name}</p>
+                        <p className="mt-2 text-2xl font-semibold text-brand-navy">{formatNumber(item.value)}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="rounded-[1.75rem] border border-brand-mist bg-white p-4 shadow-sm">
+                  <div className="mb-3">
+                    <p className="text-sm font-semibold text-brand-navy">Escuelas con más acciones declaradas en 2025</p>
+                    <p className="text-sm text-slate-500">Top de establecimientos que declararon salidas en su PME 2025, con estado de concreción real.</p>
+                  </div>
+                  <div className="h-80">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={derivedMetrics.pme2025SchoolsChart} layout="vertical" margin={{ top: 10, right: 10, bottom: 0, left: 30 }}>
+                        <CartesianGrid horizontal={false} stroke="#d7ddea" />
+                        <XAxis type="number" allowDecimals={false} tick={{ fontSize: 12 }} />
+                        <YAxis dataKey="name" type="category" width={180} tick={{ fontSize: 12 }} />
+                        <Tooltip formatter={(value) => [formatNumber(value), 'Acciones 2025']} />
+                        <Bar dataKey="actions" radius={[0, 12, 12, 0]}>
+                          {derivedMetrics.pme2025SchoolsChart.map((entry) => (
+                            <Cell key={`${entry.name}-${entry.status}`} fill={entry.status === 'Concretada' ? '#006BB9' : '#FF8A00'} />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <div className="mt-4 grid gap-2">
+                    {derivedMetrics.pme2025SchoolsChart.map((item) => (
+                      <div key={`${item.name}-${item.commune}`} className="flex items-center justify-between rounded-2xl bg-slate-50 px-4 py-3 text-sm">
+                        <div>
+                          <p className="font-medium text-slate-900">{item.name}</p>
+                          <p className="text-slate-500">{item.commune}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="font-semibold text-brand-navy">{formatNumber(item.actions)} acciones</p>
+                          <p className={item.status === 'Concretada' ? 'text-xs text-sky-700' : 'text-xs text-amber-700'}>{item.status}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
             </SectionCard>
