@@ -53,16 +53,16 @@ function buildRecommendation(profile) {
     return 'Postergar';
   }
 
-  if (profile.pendingThisYear && profile.estimatedBudgetForPlanningYear > 0 && profile.score >= 65) {
+  if (!profile.wasCovered2025 && profile.pendingThisYear && profile.hasPmeResources) {
+    return 'Priorizar por no cobertura 2025';
+  }
+
+  if (profile.pendingThisYear && profile.score >= 65) {
     return 'Asignar este año';
   }
 
-  if (profile.pendingThisYear && profile.estimatedBudgetForPlanningYear === 0) {
-    return 'Revisar por monto';
-  }
-
   if (profile.score >= 50) {
-    return 'Revisar por monto';
+    return 'Prioridad media';
   }
 
   return 'Postergar';
@@ -71,35 +71,32 @@ function buildRecommendation(profile) {
 function scoreProfile(profile, context, strategy) {
   const communeCoverage = context.communes[profile.commune] || { coverageRate: 0 };
   const ruralCoverage = context.ruralities[profile.ruralityGroup] || { coverageRate: 0 };
-  const normalizedBudget = context.maxBudget > 0
-    ? 1 - clamp(profile.estimatedBudgetForPlanningYear / context.maxBudget, 0, 1)
-    : 0.5;
   const normalizedActions = clamp(profile.actionsForPlanningYear / 8, 0, 1);
   const missingRecordPenalty = profile.hasPlanningYearRecord ? 0 : -12;
   const resourcePenalty = profile.hasPmeResources ? 0 : -30;
   const pendingScore = profile.pendingThisYear ? 30 : 6;
+  const noCoverage2025Score = profile.wasCovered2025 ? 0 : 22;
   const ruralScore = profile.ruralityGroup === 'Rural' ? 14 : 4;
   const communeGapScore = (1 - communeCoverage.coverageRate) * 18;
   const ruralGapScore = (1 - ruralCoverage.coverageRate) * 12;
   const actionsScore = normalizedActions * 18;
-  const budgetEfficiencyScore = normalizedBudget * 14;
 
   const strategyWeights = {
-    coverage: { pending: 1.15, rural: 0.8, communeGap: 1, ruralGap: 0.8, actions: 0.8, budget: 1.45 },
-    rural: { pending: 1.05, rural: 1.8, communeGap: 0.9, ruralGap: 1.5, actions: 0.75, budget: 0.9 },
-    balance: { pending: 1.05, rural: 1, communeGap: 1.8, ruralGap: 1.1, actions: 0.8, budget: 0.9 },
-    need: { pending: 1.35, rural: 1, communeGap: 1.15, ruralGap: 1, actions: 1.45, budget: 0.7 },
-    lowBudget: { pending: 1.1, rural: 0.85, communeGap: 1, ruralGap: 0.9, actions: 0.75, budget: 1.75 },
+    coverage: { pending: 1.15, noCoverage2025: 1.5, rural: 0.8, communeGap: 1, ruralGap: 0.8, actions: 0.8 },
+    rural: { pending: 1.05, noCoverage2025: 1.3, rural: 1.8, communeGap: 0.9, ruralGap: 1.5, actions: 0.75 },
+    balance: { pending: 1.05, noCoverage2025: 1.35, rural: 1, communeGap: 1.8, ruralGap: 1.1, actions: 0.8 },
+    need: { pending: 1.35, noCoverage2025: 1.45, rural: 1, communeGap: 1.15, ruralGap: 1, actions: 1.45 },
+    lowBudget: { pending: 1.1, noCoverage2025: 1.25, rural: 0.85, communeGap: 1, ruralGap: 0.9, actions: 0.75 },
   };
 
   const weights = strategyWeights[strategy] || strategyWeights.coverage;
   const score = clamp(
     pendingScore * weights.pending
+      + noCoverage2025Score * weights.noCoverage2025
       + ruralScore * weights.rural
       + communeGapScore * weights.communeGap
       + ruralGapScore * weights.ruralGap
       + actionsScore * weights.actions
-      + budgetEfficiencyScore * weights.budget
       + missingRecordPenalty,
       + resourcePenalty,
     0,
@@ -112,6 +109,10 @@ function scoreProfile(profile, context, strategy) {
     reasons.push('Pendiente del año en planificación');
   }
 
+  if (!profile.wasCovered2025) {
+    reasons.push('No fue cubierta en 2025');
+  }
+
   if (profile.ruralityGroup === 'Rural') {
     reasons.push('Prioridad territorial rural');
   }
@@ -122,10 +123,6 @@ function scoreProfile(profile, context, strategy) {
 
   if (profile.actionsForPlanningYear >= 3) {
     reasons.push('Alta intensidad de acciones');
-  }
-
-  if (profile.estimatedBudgetForPlanningYear > 0 && normalizedBudget > 0.55) {
-    reasons.push('Buena relación cobertura/monto');
   }
 
   if (!profile.hasPlanningYearRecord) {
@@ -182,6 +179,7 @@ export function buildStrategicProfiles(records, planningYear, strategy = 'covera
       estimatedBudgetForPlanningYear: 0,
       hasPlanningYearRecord: false,
       hasPmeResources: false,
+      wasCovered2025: false,
       hasOutingThisYear: false,
       hasOutingAnyYear: false,
       records: [],
@@ -191,6 +189,7 @@ export function buildStrategicProfiles(records, planningYear, strategy = 'covera
     existing.totalActions += Number(item.actionCount) || 0;
     existing.totalBudget += Number(item.estimatedBudget) || 0;
     existing.totalRecords += 1;
+    existing.wasCovered2025 = existing.wasCovered2025 || Boolean(item.wasCovered2025);
     existing.hasOutingAnyYear = existing.hasOutingAnyYear || Boolean(item.hasPedagogicalOuting);
     existing.records.push(item);
 
@@ -277,7 +276,6 @@ export function buildStrategicProfiles(records, planningYear, strategy = 'covera
   const context = {
     communes: communeBuckets,
     ruralities: ruralityBuckets,
-    maxBudget,
   };
 
   const scoredProfiles = profiles
@@ -303,53 +301,6 @@ export function buildStrategicProfiles(records, planningYear, strategy = 'covera
     ruralityCoverage: Object.entries(ruralityBuckets)
       .map(([name, bucket]) => ({ name, ...bucket }))
       .sort((left, right) => left.coverageRate - right.coverageRate),
-  };
-}
-
-export function buildBudgetSimulation(profiles, budgetAmount) {
-  const budget = Number(budgetAmount) || 0;
-  const recommended = (profiles || [])
-    .filter((item) => item.pendingThisYear && item.hasPmeResources)
-    .sort((left, right) => right.score - left.score);
-  let remaining = budget;
-  let accumulated = 0;
-  const covered = [];
-  const uncovered = [];
-
-  recommended.forEach((profile, index) => {
-    const cost = Number(profile.estimatedBudgetForPlanningYear) || 0;
-
-    if (cost <= remaining) {
-      accumulated += cost;
-      covered.push({
-        ...profile,
-        simulationOrder: covered.length + 1,
-        simulationAccumulatedBudget: accumulated,
-      });
-      remaining -= cost;
-      return;
-    }
-
-    uncovered.push({
-      ...profile,
-      simulationOrder: index + 1,
-      simulationAccumulatedBudget: accumulated,
-    });
-  });
-
-  const coveredCommunes = [...new Set(covered.map((item) => item.commune))].filter(Boolean);
-  const uncoveredCommunes = [...new Set(uncovered.map((item) => item.commune))].filter(Boolean);
-
-  return {
-    inputBudget: budget,
-    coveredCount: covered.length,
-    uncoveredCount: uncovered.length,
-    coveredBudget: budget - remaining,
-    remainingBudget: remaining,
-    coveredCommunes,
-    uncoveredCommunes,
-    covered,
-    uncovered,
   };
 }
 

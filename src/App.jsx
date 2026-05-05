@@ -18,7 +18,7 @@ import MetricCard from './components/MetricCard';
 import SectionCard from './components/SectionCard';
 import { fetchDashboardData } from './lib/api';
 import { formatCurrency, formatDate, formatNumber } from './lib/formatters';
-import { buildBudgetSimulation, buildStrategicProfiles, getStrategyLabel, resolvePlanningYear } from './lib/strategic';
+import { buildStrategicProfiles, getStrategyLabel, resolvePlanningYear } from './lib/strategic';
 
 const PIE_COLORS = ['#25306B', '#006BB9', '#FF1D3D', '#EDF0F5'];
 const STRATEGY_OPTIONS = [
@@ -51,8 +51,6 @@ export default function App() {
   const [strategy, setStrategy] = useState('coverage');
   const [planningYear, setPlanningYear] = useState('auto');
   const [showPendingOnly, setShowPendingOnly] = useState(true);
-  const [budgetInput, setBudgetInput] = useState('15000000');
-  const [budgetTouched, setBudgetTouched] = useState(false);
   const [selectedItem, setSelectedItem] = useState(null);
 
   useEffect(() => {
@@ -146,15 +144,11 @@ export default function App() {
     [strategicModel.profiles],
   );
 
-  const budgetSimulation = useMemo(
-    () => buildBudgetSimulation(strategicModel.profiles, budgetInput),
-    [budgetInput, strategicModel.profiles],
-  );
-
   const strategicMetrics = useMemo(() => {
     const pendingProfiles = strategicModel.profiles.filter((item) => item.pendingThisYear);
     const tramitableProfiles = strategicModel.profiles.filter((item) => item.hasPmeResources);
     const nonTramitableProfiles = strategicModel.profiles.filter((item) => !item.hasPmeResources);
+    const notCovered2025Profiles = pendingProfiles.filter((item) => !item.wasCovered2025);
     const pendingBudget = pendingProfiles.reduce((sum, item) => sum + item.estimatedBudgetForPlanningYear, 0);
     const coverageRate = tramitableProfiles.length
       ? (tramitableProfiles.length - pendingProfiles.length) / tramitableProfiles.length
@@ -165,6 +159,7 @@ export default function App() {
       tramitableCount: tramitableProfiles.length,
       nonTramitableCount: nonTramitableProfiles.length,
       pendingCount: pendingProfiles.length,
+      notCovered2025Count: notCovered2025Profiles.length,
       pendingBudget,
       coverageRate,
       weakestCommune,
@@ -174,18 +169,6 @@ export default function App() {
       territorialSummary: strategicModel.communeCoverage.slice(0, 6),
     };
   }, [strategicModel, strategicProfiles]);
-
-  useEffect(() => {
-    if (!budgetTouched && strategicMetrics.pendingBudget > 0) {
-      setBudgetInput(String(Math.round(strategicMetrics.pendingBudget)));
-    }
-  }, [budgetTouched, strategicMetrics.pendingBudget]);
-
-  const parsedBudgetInput = Number(budgetInput) || 0;
-  const budgetSliderMax = Math.max(Math.round(strategicMetrics.pendingBudget || 0), 1000000);
-  const budgetCoverageShare = strategicMetrics.pendingCount
-    ? budgetSimulation.coveredCount / strategicMetrics.pendingCount
-    : 0;
 
   const derivedMetrics = useMemo(() => {
     const totalRecords = filteredItems.length;
@@ -320,10 +303,25 @@ export default function App() {
                 tone="emerald"
               />
               <MetricCard
+                title="No cubiertas 2025"
+                value={formatNumber(strategicMetrics.notCovered2025Count)}
+                helper="Criterio prioritario para decidir el trabajo 2026"
+                tone="sky"
+              />
+            </section>
+
+            <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-2">
+              <MetricCard
                 title="Monto a distribuir"
                 value={formatCurrency(strategicMetrics.pendingBudget)}
                 helper="Gasto potencial sobre las escuelas que sí lo determinaron en su PME"
                 tone="sky"
+              />
+              <MetricCard
+                title="Criterio 2026"
+                value="Priorizar no cubiertas 2025"
+                helper="El simulador ordena primero las escuelas que no logramos cubrir en 2025"
+                tone="amber"
               />
             </section>
 
@@ -425,6 +423,7 @@ export default function App() {
                           <th className="px-4 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Prioridad</th>
                           <th className="px-4 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Score</th>
                           <th className="px-4 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Monto</th>
+                          <th className="px-4 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Cobertura 2025</th>
                           <th className="px-4 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Motivo</th>
                         </tr>
                       </thead>
@@ -450,6 +449,14 @@ export default function App() {
                             </td>
                             <td className="border-b border-slate-100 px-4 py-3 font-semibold text-brand-navy">{formatNumber(item.score)}</td>
                             <td className="border-b border-slate-100 px-4 py-3 text-slate-700">{formatCurrency(item.estimatedBudgetForPlanningYear)}</td>
+                            <td className="border-b border-slate-100 px-4 py-3">
+                              <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
+                                item.wasCovered2025 ? 'bg-slate-100 text-slate-700' : 'bg-emerald-100 text-emerald-700'
+                              }`}
+                              >
+                                {item.wasCovered2025 ? 'Cubierta' : 'No cubierta'}
+                              </span>
+                            </td>
                             <td className="border-b border-slate-100 px-4 py-3 text-slate-500">{item.reasons[0] || 'Sin observación estratégica'}</td>
                           </tr>
                         ))}
@@ -476,188 +483,27 @@ export default function App() {
                   </div>
 
                   <div className="rounded-[1.75rem] border border-brand-mist bg-[linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)] p-5 shadow-sm">
-                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Simulador de presupuesto</p>
-                    <h3 className="mt-2 text-lg font-semibold text-brand-navy">Cuánto alcanza el presupuesto disponible</h3>
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Criterios de prioridad 2026</p>
+                    <h3 className="mt-2 text-lg font-semibold text-brand-navy">Cómo se define la priorización</h3>
                     <p className="mt-2 text-sm text-slate-500">
-                      Ajusta el monto y verás en tiempo real cuántas escuelas tramitables pueden cubrirse.
+                      La prioridad 2026 se calcula sin usar montos. El foco está en cobertura histórica y equidad territorial.
                     </p>
-                    <label className="mt-4 flex flex-col gap-2">
-                      <span className="text-sm font-medium text-slate-700">Monto total disponible</span>
-                      <input
-                        className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-brand-blue focus:ring-4 focus:ring-brand-blue/10"
-                        value={budgetInput}
-                        onChange={(event) => {
-                          setBudgetTouched(true);
-                          setBudgetInput(event.target.value.replace(/[^0-9]/g, ''));
-                        }}
-                        placeholder="Ej. 15000000"
-                        inputMode="numeric"
-                      />
-                    </label>
-
-                    <div className="mt-3 flex items-center justify-between gap-3 text-sm">
-                      <span className="rounded-full bg-slate-100 px-3 py-1 font-medium text-slate-600">
-                        Ingresado: {formatCurrency(parsedBudgetInput)}
-                      </span>
-                      <span className="rounded-full bg-brand-mist px-3 py-1 font-medium text-brand-navy">
-                        Objetivo total: {formatCurrency(strategicMetrics.pendingBudget)}
-                      </span>
-                    </div>
-
-                    <div className="mt-4">
-                      <input
-                        type="range"
-                        min="0"
-                        max={budgetSliderMax}
-                        step={Math.max(Math.round(budgetSliderMax / 100), 10000)}
-                        value={Math.min(parsedBudgetInput, budgetSliderMax)}
-                        onChange={(event) => {
-                          setBudgetTouched(true);
-                          setBudgetInput(event.target.value);
-                        }}
-                        className="h-2 w-full cursor-pointer appearance-none rounded-full bg-slate-200 accent-[#25306B]"
-                      />
-                      <div className="mt-2 flex flex-wrap gap-2">
-                        {[0.25, 0.5, 0.75, 1].map((fraction) => {
-                          const nextValue = Math.round(budgetSliderMax * fraction);
-
-                          return (
-                            <button
-                              key={fraction}
-                              type="button"
-                              onClick={() => {
-                                setBudgetTouched(true);
-                                setBudgetInput(String(nextValue));
-                              }}
-                              className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600 transition hover:border-brand-blue hover:text-brand-blue"
-                            >
-                              {Math.round(fraction * 100)}%
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-
-                    <div className="mt-4 rounded-2xl bg-slate-50 p-4">
-                      <div className="flex items-center justify-between gap-3 text-sm">
-                        <span className="font-medium text-slate-700">Cobertura simulada</span>
-                        <span className="font-semibold text-brand-navy">{formatPercent(budgetCoverageShare)}</span>
-                      </div>
-                      <div className="mt-3 h-3 overflow-hidden rounded-full bg-slate-200">
-                        <div
-                          className="h-full rounded-full bg-[linear-gradient(90deg,#25306B_0%,#006BB9_100%)] transition-all duration-300"
-                          style={{ width: `${Math.max(Math.min(budgetCoverageShare * 100, 100), 0)}%` }}
-                        />
-                      </div>
-                      <p className="mt-2 text-sm text-slate-500">
-                        {formatNumber(budgetSimulation.coveredCount)} de {formatNumber(strategicMetrics.pendingCount)} escuelas tramitables cubiertas.
-                      </p>
-                    </div>
-
                     <div className="mt-4 grid gap-3 sm:grid-cols-2">
                       <div className="rounded-2xl bg-slate-50 p-4">
-                        <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Escuelas cubiertas</p>
-                        <p className="mt-2 text-2xl font-semibold text-brand-navy">{formatNumber(budgetSimulation.coveredCount)}</p>
-                        <p className="mt-1 text-sm text-slate-500">Segun ranking y presupuesto</p>
+                        <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Criterio principal</p>
+                        <p className="mt-2 text-base font-semibold text-brand-navy">Escuelas no cubiertas en 2025</p>
+                        <p className="mt-1 text-sm text-slate-500">Suben primero en el ranking para la planificación 2026.</p>
                       </div>
                       <div className="rounded-2xl bg-slate-50 p-4">
-                        <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Saldo remanente</p>
-                        <p className="mt-2 text-2xl font-semibold text-brand-navy">{formatCurrency(budgetSimulation.remainingBudget)}</p>
-                        <p className="mt-1 text-sm text-slate-500">Despues de cubrir las prioridades</p>
+                        <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Criterios complementarios</p>
+                        <p className="mt-2 text-base font-semibold text-brand-navy">Cobertura comunal, ruralidad y acciones</p>
+                        <p className="mt-1 text-sm text-slate-500">Se usan para desempatar y reforzar la priorización territorial.</p>
                       </div>
                     </div>
 
                     <div className="mt-4 rounded-2xl bg-brand-mist p-4 text-sm text-slate-600">
-                      <p><span className="font-semibold text-brand-navy">Comunas cubiertas:</span> {budgetSimulation.coveredCommunes.join(', ') || 'Sin cobertura simulada'}</p>
-                      <p className="mt-2"><span className="font-semibold text-brand-navy">Comunas fuera:</span> {budgetSimulation.uncoveredCommunes.join(', ') || 'Ninguna'}</p>
-                    </div>
-
-                    <div className="mt-4 rounded-[1.5rem] border border-slate-200 bg-white p-4">
-                      <div className="flex items-center justify-between gap-3">
-                        <div>
-                          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Escuelas que se pueden trabajar</p>
-                          <p className="mt-1 text-sm text-slate-500">Listado dinámico según el monto ingresado y el orden de prioridad actual.</p>
-                        </div>
-                        <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
-                          {formatNumber(budgetSimulation.coveredCount)} seleccionadas
-                        </span>
-                      </div>
-
-                      <div className="mt-4 max-h-72 overflow-auto rounded-2xl border border-slate-100">
-                        {budgetSimulation.covered.length ? (
-                          <table className="min-w-full border-separate border-spacing-0 text-sm">
-                            <thead>
-                              <tr className="bg-slate-50 text-left">
-                                <th className="sticky top-0 bg-slate-50 px-4 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">#</th>
-                                <th className="sticky top-0 bg-slate-50 px-4 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Escuela</th>
-                                <th className="sticky top-0 bg-slate-50 px-4 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Comuna</th>
-                                <th className="sticky top-0 bg-slate-50 px-4 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Monto</th>
-                                <th className="sticky top-0 bg-slate-50 px-4 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Acumulado</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {budgetSimulation.covered.map((item, index) => (
-                                <tr key={`${item.rbd}-${item.simulationOrder}`} className={index % 2 === 0 ? 'bg-white' : 'bg-slate-50/60'}>
-                                  <td className="border-b border-slate-100 px-4 py-3 font-semibold text-brand-navy">{formatNumber(item.simulationOrder)}</td>
-                                  <td className="border-b border-slate-100 px-4 py-3">
-                                    <p className="font-medium text-slate-900">{item.name}</p>
-                                    <p className="mt-1 text-xs text-slate-500">RBD {item.rbd}</p>
-                                  </td>
-                                  <td className="border-b border-slate-100 px-4 py-3 text-slate-600">{item.commune}</td>
-                                  <td className="border-b border-slate-100 px-4 py-3 text-slate-700">{formatCurrency(item.estimatedBudgetForPlanningYear)}</td>
-                                  <td className="border-b border-slate-100 px-4 py-3 font-semibold text-emerald-700">{formatCurrency(item.simulationAccumulatedBudget)}</td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        ) : (
-                          <div className="px-4 py-8 text-center text-sm text-slate-500">
-                            Con el monto ingresado no entra ninguna escuela. Sube el presupuesto para que aparezcan establecimientos tramitables.
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="mt-4 rounded-[1.5rem] border border-slate-200 bg-white p-4">
-                      <div className="flex items-center justify-between gap-3">
-                        <div>
-                          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Escuelas que quedan pendientes</p>
-                          <p className="mt-1 text-sm text-slate-500">No alcanzan a entrar dentro del monto actual.</p>
-                        </div>
-                        <span className="rounded-full bg-red-50 px-3 py-1 text-xs font-semibold text-red-700">
-                          {formatNumber(budgetSimulation.uncoveredCount)} fuera
-                        </span>
-                      </div>
-
-                      <div className="mt-4 max-h-64 overflow-auto rounded-2xl border border-slate-100">
-                        {budgetSimulation.uncovered.length ? (
-                          <table className="min-w-full border-separate border-spacing-0 text-sm">
-                            <thead>
-                              <tr className="bg-slate-50 text-left">
-                                <th className="sticky top-0 bg-slate-50 px-4 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Escuela</th>
-                                <th className="sticky top-0 bg-slate-50 px-4 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Comuna</th>
-                                <th className="sticky top-0 bg-slate-50 px-4 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Monto</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {budgetSimulation.uncovered.map((item, index) => (
-                                <tr key={`${item.rbd}-${item.simulationOrder}-outside`} className={index % 2 === 0 ? 'bg-white' : 'bg-slate-50/60'}>
-                                  <td className="border-b border-slate-100 px-4 py-3">
-                                    <p className="font-medium text-slate-900">{item.name}</p>
-                                    <p className="mt-1 text-xs text-slate-500">RBD {item.rbd}</p>
-                                  </td>
-                                  <td className="border-b border-slate-100 px-4 py-3 text-slate-600">{item.commune}</td>
-                                  <td className="border-b border-slate-100 px-4 py-3 text-slate-700">{formatCurrency(item.estimatedBudgetForPlanningYear)}</td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        ) : (
-                          <div className="px-4 py-8 text-center text-sm text-slate-500">
-                            No quedan escuelas fuera. Con este monto puedes trabajar todo el grupo tramitable pendiente.
-                          </div>
-                        )}
-                      </div>
+                      <p><span className="font-semibold text-brand-navy">No cubiertas 2025:</span> {formatNumber(strategicMetrics.notCovered2025Count)} escuelas pendientes.</p>
+                      <p className="mt-2"><span className="font-semibold text-brand-navy">Comuna más rezagada:</span> {strategicMetrics.weakestCommune?.name || 'Sin dato'}.</p>
                     </div>
                   </div>
 
@@ -665,7 +511,7 @@ export default function App() {
                     <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/70">Lectura ejecutiva</p>
                     <p className="mt-3 text-sm leading-7 text-white/80">
                       Bajo la estrategia <span className="font-semibold text-white">{getStrategyLabel(strategy)}</span>, el sistema prioriza
-                      {showPendingOnly ? ' escuelas tramitables pendientes del año activo' : ' el universo completo filtrado'} y estima una cobertura de
+                      {showPendingOnly ? ' escuelas tramitables pendientes del año activo' : ' el universo completo filtrado'} y ordena primero las no cubiertas en 2025, estimando una cobertura de
                       <span className="font-semibold text-white"> {formatPercent(strategicMetrics.coverageRate)}</span> dentro de la base con recursos PME para {effectivePlanningYear}.
                     </p>
                     <p className="mt-4 text-sm leading-7 text-white/80">

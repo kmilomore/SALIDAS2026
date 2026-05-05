@@ -1,6 +1,7 @@
 var SPREADSHEET_ID = '1vabUWJLgWGP0SRi0RStJ7awgZXzOY6VwVVMCT1ZQawE';
 var ANALYSIS_SHEET = 'ANALISIS';
 var ESTABLISHMENTS_SHEET = 'ESTABLECIMIENTOS';
+var COVERED_2025_SHEET = '2025';
 
 function doGet(e) {
   try {
@@ -24,8 +25,11 @@ function buildDashboardPayload() {
   var spreadsheet = SpreadsheetApp.openById(SPREADSHEET_ID);
   var analysisRows = readSheetAsObjects(spreadsheet.getSheetByName(ANALYSIS_SHEET));
   var establishmentRows = readSheetAsObjects(spreadsheet.getSheetByName(ESTABLISHMENTS_SHEET));
+  var covered2025Rows = readSheetAsObjects(spreadsheet.getSheetByName(COVERED_2025_SHEET));
 
   var establishmentsMap = {};
+  var covered2025Map = {};
+
   establishmentRows.forEach(function(row) {
     var rbd = normalizeRbd(firstFilledValue(row) || row.rbd || row.codigo_rbd || row.cod_rbd);
     if (!rbd) {
@@ -33,6 +37,15 @@ function buildDashboardPayload() {
     }
 
     establishmentsMap[rbd] = row;
+  });
+
+  covered2025Rows.forEach(function(row) {
+    var rbd = normalizeRbd(firstFilledValue(row) || row.rbd || row.codigo_rbd || row.cod_rbd);
+    if (!rbd) {
+      return;
+    }
+
+    covered2025Map[rbd] = true;
   });
 
   var records = analysisRows
@@ -69,6 +82,7 @@ function buildDashboardPayload() {
         area: pickFirst(establishment, ['area_geografica', 'area', 'zona']) || 'Sin dato',
         rurality: pickFirst(establishment, ['ruralidad', 'rural', 'urbano_rural', 'rural_urbano']) || 'Sin dato',
         year: year,
+        wasCovered2025: Boolean(covered2025Map[rbd]),
         hasPedagogicalOuting: hasPedagogicalOuting,
         actionCount: actionCount,
         dimensions: dimensions,
