@@ -42,7 +42,11 @@ function getPriorityLabel(score) {
 
 function buildRecommendation(profile) {
   if (!profile.hasPlanningYearRecord) {
-    return 'Falta dato para decidir';
+    return 'Sin registro PME del año';
+  }
+
+  if (!profile.hasPmeResources) {
+    return 'No tramitable sin recursos PME';
   }
 
   if (!profile.pendingThisYear && profile.score < 55) {
@@ -71,7 +75,8 @@ function scoreProfile(profile, context, strategy) {
     ? 1 - clamp(profile.estimatedBudgetForPlanningYear / context.maxBudget, 0, 1)
     : 0.5;
   const normalizedActions = clamp(profile.actionsForPlanningYear / 8, 0, 1);
-  const missingRecordPenalty = profile.hasPlanningYearRecord ? 0 : -8;
+  const missingRecordPenalty = profile.hasPlanningYearRecord ? 0 : -12;
+  const resourcePenalty = profile.hasPmeResources ? 0 : -30;
   const pendingScore = profile.pendingThisYear ? 30 : 6;
   const ruralScore = profile.ruralityGroup === 'Rural' ? 14 : 4;
   const communeGapScore = (1 - communeCoverage.coverageRate) * 18;
@@ -96,6 +101,7 @@ function scoreProfile(profile, context, strategy) {
       + actionsScore * weights.actions
       + budgetEfficiencyScore * weights.budget
       + missingRecordPenalty,
+      + resourcePenalty,
     0,
     100,
   );
@@ -103,7 +109,7 @@ function scoreProfile(profile, context, strategy) {
   const reasons = [];
 
   if (profile.pendingThisYear) {
-    reasons.push('Pendiente del ano en planificacion');
+    reasons.push('Pendiente del año en planificación');
   }
 
   if (profile.ruralityGroup === 'Rural') {
@@ -119,11 +125,15 @@ function scoreProfile(profile, context, strategy) {
   }
 
   if (profile.estimatedBudgetForPlanningYear > 0 && normalizedBudget > 0.55) {
-    reasons.push('Buena relacion cobertura/monto');
+    reasons.push('Buena relación cobertura/monto');
   }
 
   if (!profile.hasPlanningYearRecord) {
-    reasons.push('Sin registro del ano activo');
+    reasons.push('Sin registro del año activo');
+  }
+
+  if (profile.hasPlanningYearRecord && !profile.hasPmeResources) {
+    reasons.push('Sin recursos asociados en PME');
   }
 
   return {
@@ -171,6 +181,7 @@ export function buildStrategicProfiles(records, planningYear, strategy = 'covera
       actionsForPlanningYear: 0,
       estimatedBudgetForPlanningYear: 0,
       hasPlanningYearRecord: false,
+      hasPmeResources: false,
       hasOutingThisYear: false,
       hasOutingAnyYear: false,
       records: [],
@@ -196,7 +207,9 @@ export function buildStrategicProfiles(records, planningYear, strategy = 'covera
   const profiles = [...buckets.values()].map((item) => ({
     ...item,
     dimensions: [...item.dimensions].sort(),
-    pendingThisYear: item.hasPlanningYearRecord ? !item.hasOutingThisYear : true,
+    hasPmeResources: item.estimatedBudgetForPlanningYear > 0,
+    pendingThisYear: item.hasPlanningYearRecord && item.estimatedBudgetForPlanningYear > 0 && !item.hasOutingThisYear,
+    blockedByMissingBudget: item.hasPlanningYearRecord && item.estimatedBudgetForPlanningYear <= 0,
   }));
 
   const communeBuckets = {};
@@ -208,15 +221,37 @@ export function buildStrategicProfiles(records, planningYear, strategy = 'covera
     const ruralityKey = profile.ruralityGroup;
 
     if (!communeBuckets[communeKey]) {
-      communeBuckets[communeKey] = { total: 0, withOuting: 0, withoutOuting: 0, estimatedBudget: 0 };
+      communeBuckets[communeKey] = {
+        total: 0,
+        withBudget: 0,
+        withoutBudget: 0,
+        withOuting: 0,
+        withoutOuting: 0,
+        estimatedBudget: 0,
+      };
     }
 
     if (!ruralityBuckets[ruralityKey]) {
-      ruralityBuckets[ruralityKey] = { total: 0, withOuting: 0, withoutOuting: 0, estimatedBudget: 0 };
+      ruralityBuckets[ruralityKey] = {
+        total: 0,
+        withBudget: 0,
+        withoutBudget: 0,
+        withOuting: 0,
+        withoutOuting: 0,
+        estimatedBudget: 0,
+      };
     }
 
     communeBuckets[communeKey].total += 1;
     ruralityBuckets[ruralityKey].total += 1;
+
+    if (profile.hasPmeResources) {
+      communeBuckets[communeKey].withBudget += 1;
+      ruralityBuckets[ruralityKey].withBudget += 1;
+    } else {
+      communeBuckets[communeKey].withoutBudget += 1;
+      ruralityBuckets[ruralityKey].withoutBudget += 1;
+    }
 
     if (profile.pendingThisYear) {
       communeBuckets[communeKey].withoutOuting += 1;
@@ -232,11 +267,11 @@ export function buildStrategicProfiles(records, planningYear, strategy = 'covera
   });
 
   Object.values(communeBuckets).forEach((bucket) => {
-    bucket.coverageRate = bucket.total ? bucket.withOuting / bucket.total : 0;
+    bucket.coverageRate = bucket.withBudget ? bucket.withOuting / bucket.withBudget : 0;
   });
 
   Object.values(ruralityBuckets).forEach((bucket) => {
-    bucket.coverageRate = bucket.total ? bucket.withOuting / bucket.total : 0;
+    bucket.coverageRate = bucket.withBudget ? bucket.withOuting / bucket.withBudget : 0;
   });
 
   const context = {
@@ -273,7 +308,9 @@ export function buildStrategicProfiles(records, planningYear, strategy = 'covera
 
 export function buildBudgetSimulation(profiles, budgetAmount) {
   const budget = Number(budgetAmount) || 0;
-  const recommended = (profiles || []).filter((item) => item.pendingThisYear).sort((left, right) => right.score - left.score);
+  const recommended = (profiles || [])
+    .filter((item) => item.pendingThisYear && item.hasPmeResources)
+    .sort((left, right) => right.score - left.score);
   let remaining = budget;
   const covered = [];
   const uncovered = [];
@@ -312,7 +349,7 @@ export function getStrategyLabel(strategy) {
     rural: 'Priorizar rurales',
     balance: 'Equilibrar comunas',
     need: 'Priorizar mayor necesidad',
-    lowBudget: 'Priorizar menor inversion previa',
+    lowBudget: 'Priorizar menor inversión previa',
   };
 
   return labels[strategy] || labels.coverage;

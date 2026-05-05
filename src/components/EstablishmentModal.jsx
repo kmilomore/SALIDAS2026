@@ -105,7 +105,7 @@ export default function EstablishmentModal({ item, strategicProfile, planningYea
             <div className="rounded-[1.75rem] border border-slate-200 bg-white p-5">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <p className="text-sm font-semibold text-slate-900">Lectura estrategica</p>
+                  <p className="text-sm font-semibold text-slate-900">Lectura estratégica</p>
                   <p className="mt-1 text-sm text-slate-500">Explica por que este establecimiento queda en determinada prioridad para {planningYear}.</p>
                 </div>
                 <span className="rounded-full bg-brand-mist px-3 py-1 text-xs font-semibold text-brand-navy">
@@ -126,7 +126,7 @@ export default function EstablishmentModal({ item, strategicProfile, planningYea
               <div className="mt-4 rounded-2xl bg-slate-50 p-4">
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Motivos de priorización</p>
                 <div className="mt-3 flex flex-wrap gap-2">
-                  {(strategicProfile?.reasons?.length ? strategicProfile.reasons : ['Sin explicacion estrategica']).map((reason) => (
+                  {(strategicProfile?.reasons?.length ? strategicProfile.reasons : ['Sin explicación estratégica']).map((reason) => (
                     <span key={reason} className="rounded-full bg-white px-3 py-2 text-xs font-medium text-slate-700 shadow-sm">
                       {reason}
                     </span>

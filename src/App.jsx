@@ -27,7 +27,7 @@ const STRATEGY_OPTIONS = [
   { value: 'rural', label: 'Priorizar rurales' },
   { value: 'balance', label: 'Equilibrar comunas' },
   { value: 'need', label: 'Priorizar mayor necesidad' },
-  { value: 'lowBudget', label: 'Priorizar menor inversion previa' },
+  { value: 'lowBudget', label: 'Priorizar menor inversión previa' },
 ];
 
 function formatPercent(value) {
@@ -153,13 +153,17 @@ export default function App() {
 
   const strategicMetrics = useMemo(() => {
     const pendingProfiles = strategicModel.profiles.filter((item) => item.pendingThisYear);
+    const tramitableProfiles = strategicModel.profiles.filter((item) => item.hasPmeResources);
+    const nonTramitableProfiles = strategicModel.profiles.filter((item) => !item.hasPmeResources);
     const pendingBudget = pendingProfiles.reduce((sum, item) => sum + item.estimatedBudgetForPlanningYear, 0);
-    const coverageRate = strategicModel.profiles.length
-      ? (strategicModel.profiles.length - pendingProfiles.length) / strategicModel.profiles.length
+    const coverageRate = tramitableProfiles.length
+      ? (tramitableProfiles.length - pendingProfiles.length) / tramitableProfiles.length
       : 0;
     const weakestCommune = strategicModel.communeCoverage[0] || null;
 
     return {
+      tramitableCount: tramitableProfiles.length,
+      nonTramitableCount: nonTramitableProfiles.length,
       pendingCount: pendingProfiles.length,
       pendingBudget,
       coverageRate,
@@ -286,29 +290,27 @@ export default function App() {
           <div className="mt-8 space-y-8">
             <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
               <MetricCard
-                title={`Pendientes ${effectivePlanningYear}`}
-                value={formatNumber(strategicMetrics.pendingCount)}
-                helper="Escuelas sin salida o sin registro para el ano activo"
+                title="Con recursos PME"
+                value={formatNumber(strategicMetrics.tramitableCount)}
+                helper={`Escuelas con recursos asociados en su PME para ${effectivePlanningYear}`}
                 tone="coral"
               />
               <MetricCard
-                title="Monto pendiente"
-                value={formatCurrency(strategicMetrics.pendingBudget)}
-                helper="Monto estimado comprometido si se cubren los pendientes"
+                title="Sin recursos PME"
+                value={formatNumber(strategicMetrics.nonTramitableCount)}
+                helper="Escuelas que no pueden tramitarse por falta de recursos asociados"
                 tone="amber"
               />
               <MetricCard
-                title="Cobertura actual"
-                value={formatPercent(strategicMetrics.coverageRate)}
-                helper={`Cobertura estrategica observada para ${effectivePlanningYear}`}
+                title={`Pendientes ${effectivePlanningYear}`}
+                value={formatNumber(strategicMetrics.pendingCount)}
+                helper="Escuelas tramitables sin salida pedagógica en el año activo"
                 tone="emerald"
               />
               <MetricCard
-                title="Comuna mas rezagada"
-                value={strategicMetrics.weakestCommune?.name || 'Sin dato'}
-                helper={strategicMetrics.weakestCommune
-                  ? `${formatPercent(strategicMetrics.weakestCommune.coverageRate)} de cobertura en el ano activo`
-                  : 'Sin comunas suficientes para comparar'}
+                title="Monto a distribuir"
+                value={formatCurrency(strategicMetrics.pendingBudget)}
+                helper="Gasto potencial sobre las escuelas que sí lo determinaron en su PME"
                 tone="sky"
               />
             </section>
@@ -342,18 +344,18 @@ export default function App() {
 
             <SectionCard
               title="Prioridad 2026"
-              description="Ranking, estrategia de asignacion y lectura presupuestaria para decidir a quienes les toca salida este ano."
+              description="Ranking, estrategia de asignación y lectura presupuestaria para decidir a quiénes les toca salida este año entre las escuelas con recursos PME."
               actions={
                 <div className="flex flex-wrap items-center gap-3">
                   <label className="flex items-center gap-2 rounded-2xl bg-slate-50 px-3 py-2 text-sm text-slate-600">
                     <Target size={16} />
-                    <span>Ano activo</span>
+                    <span>Año activo</span>
                     <select
                       className="bg-transparent font-medium outline-none"
                       value={planningYear}
                       onChange={(event) => setPlanningYear(event.target.value)}
                     >
-                      <option value="auto">Automatico</option>
+                      <option value="auto">Automático</option>
                       {years.map((itemYear) => (
                         <option key={itemYear} value={itemYear}>
                           {itemYear}
@@ -384,7 +386,7 @@ export default function App() {
                       checked={showPendingOnly}
                       onChange={(event) => setShowPendingOnly(event.target.checked)}
                     />
-                    Solo pendientes del ano
+                    Solo tramitables pendientes
                   </label>
                 </div>
               }
@@ -436,7 +438,7 @@ export default function App() {
                             </td>
                             <td className="border-b border-slate-100 px-4 py-3 font-semibold text-brand-navy">{formatNumber(item.score)}</td>
                             <td className="border-b border-slate-100 px-4 py-3 text-slate-700">{formatCurrency(item.estimatedBudgetForPlanningYear)}</td>
-                            <td className="border-b border-slate-100 px-4 py-3 text-slate-500">{item.reasons[0] || 'Sin observacion estrategica'}</td>
+                            <td className="border-b border-slate-100 px-4 py-3 text-slate-500">{item.reasons[0] || 'Sin observación estratégica'}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -445,9 +447,25 @@ export default function App() {
                 </div>
 
                 <div className="space-y-4">
+                  <div className="rounded-[1.75rem] border border-slate-200 bg-white p-5 shadow-sm">
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Condición de tramitación</p>
+                    <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                      <div className="rounded-2xl bg-emerald-50 p-4">
+                        <p className="text-xs uppercase tracking-[0.18em] text-emerald-700">Con recursos PME</p>
+                        <p className="mt-2 text-2xl font-semibold text-emerald-800">{formatNumber(strategicMetrics.tramitableCount)}</p>
+                        <p className="mt-1 text-sm text-emerald-700">Base válida para distribuir gasto</p>
+                      </div>
+                      <div className="rounded-2xl bg-red-50 p-4">
+                        <p className="text-xs uppercase tracking-[0.18em] text-red-700">Sin recursos PME</p>
+                        <p className="mt-2 text-2xl font-semibold text-red-800">{formatNumber(strategicMetrics.nonTramitableCount)}</p>
+                        <p className="mt-1 text-sm text-red-700">No pueden tramitarse por falta de recursos</p>
+                      </div>
+                    </div>
+                  </div>
+
                   <div className="rounded-[1.75rem] border border-brand-mist bg-[linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)] p-5 shadow-sm">
                     <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Simulador de presupuesto</p>
-                    <h3 className="mt-2 text-lg font-semibold text-brand-navy">Cuanto alcanza el presupuesto disponible</h3>
+                    <h3 className="mt-2 text-lg font-semibold text-brand-navy">Cuánto alcanza el presupuesto disponible</h3>
                     <label className="mt-4 flex flex-col gap-2">
                       <span className="text-sm font-medium text-slate-700">Monto total disponible</span>
                       <input
@@ -481,11 +499,11 @@ export default function App() {
                     <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/70">Lectura ejecutiva</p>
                     <p className="mt-3 text-sm leading-7 text-white/80">
                       Bajo la estrategia <span className="font-semibold text-white">{getStrategyLabel(strategy)}</span>, el sistema prioriza
-                      {showPendingOnly ? ' escuelas pendientes del ano activo' : ' el universo completo filtrado'} y estima una cobertura de
-                      <span className="font-semibold text-white"> {formatPercent(strategicMetrics.coverageRate)}</span> para {effectivePlanningYear}.
+                      {showPendingOnly ? ' escuelas tramitables pendientes del año activo' : ' el universo completo filtrado'} y estima una cobertura de
+                      <span className="font-semibold text-white"> {formatPercent(strategicMetrics.coverageRate)}</span> dentro de la base con recursos PME para {effectivePlanningYear}.
                     </p>
                     <p className="mt-4 text-sm leading-7 text-white/80">
-                      La comuna con menor cobertura observada es <span className="font-semibold text-white">{strategicMetrics.weakestCommune?.name || 'Sin dato'}</span>.
+                      La comuna con menor cobertura observada entre escuelas tramitables es <span className="font-semibold text-white">{strategicMetrics.weakestCommune?.name || 'Sin dato'}</span>.
                     </p>
                   </div>
                 </div>
@@ -512,14 +530,14 @@ export default function App() {
 
             <SectionCard
               title="Brechas territoriales"
-              description="Lectura estrategica de cobertura por comuna, ruralidad y territorios mas rezagados."
+              description="Lectura estratégica de recursos PME por comuna, ruralidad y territorios más rezagados."
             >
               <div className="grid gap-8 xl:grid-cols-[1.1fr_0.9fr]">
                 <div className="space-y-6">
                   <div className="rounded-[1.75rem] border border-brand-mist bg-white p-4 shadow-sm">
                     <div className="mb-3">
                       <p className="text-sm font-semibold text-brand-navy">Brecha por comuna</p>
-                      <p className="text-sm text-slate-500">Comparacion entre cobertura actual y escuelas pendientes del ano {effectivePlanningYear}.</p>
+                      <p className="text-sm text-slate-500">Comparación entre escuelas con y sin recursos PME asociados en {effectivePlanningYear}.</p>
                     </div>
                     <div className="h-72">
                       <ResponsiveContainer width="100%" height="100%">
@@ -528,8 +546,8 @@ export default function App() {
                           <XAxis dataKey="name" angle={-18} textAnchor="end" interval={0} height={70} tick={{ fontSize: 12 }} />
                           <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
                           <Tooltip />
-                          <Bar dataKey="withOuting" name="Con salida" radius={[10, 10, 0, 0]} fill="#25306B" />
-                          <Bar dataKey="withoutOuting" name="Pendientes" radius={[10, 10, 0, 0]} fill="#FF1D3D" />
+                          <Bar dataKey="withBudget" name="Con recursos PME" radius={[10, 10, 0, 0]} fill="#25306B" />
+                          <Bar dataKey="withoutBudget" name="Sin recursos PME" radius={[10, 10, 0, 0]} fill="#FF1D3D" />
                         </BarChart>
                       </ResponsiveContainer>
                     </div>
@@ -538,7 +556,7 @@ export default function App() {
                   <div className="rounded-[1.75rem] border border-brand-mist bg-white p-4 shadow-sm">
                     <div className="mb-3">
                       <p className="text-sm font-semibold text-brand-navy">Brecha por ruralidad</p>
-                      <p className="text-sm text-slate-500">Mide si la asignacion actual esta dejando rezagadas zonas rurales.</p>
+                      <p className="text-sm text-slate-500">Mide qué parte de la base sí tiene recursos PME y cuál queda fuera por falta de registro.</p>
                     </div>
                     <div className="h-64">
                       <ResponsiveContainer width="100%" height="100%">
@@ -547,8 +565,8 @@ export default function App() {
                           <XAxis dataKey="name" tick={{ fontSize: 12 }} />
                           <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
                           <Tooltip />
-                          <Bar dataKey="withOuting" name="Con salida" radius={[10, 10, 0, 0]} fill="#006BB9" />
-                          <Bar dataKey="withoutOuting" name="Pendientes" radius={[10, 10, 0, 0]} fill="#FF1D3D" />
+                          <Bar dataKey="withBudget" name="Con recursos PME" radius={[10, 10, 0, 0]} fill="#006BB9" />
+                          <Bar dataKey="withoutBudget" name="Sin recursos PME" radius={[10, 10, 0, 0]} fill="#FF1D3D" />
                         </BarChart>
                       </ResponsiveContainer>
                     </div>
@@ -558,7 +576,7 @@ export default function App() {
                 <div className="rounded-[1.75rem] bg-[linear-gradient(180deg,#f7f9fc_0%,#edf0f5_100%)] p-4">
                   <div className="mb-4">
                     <p className="text-sm font-semibold text-brand-navy">Radar territorial</p>
-                    <p className="text-sm text-slate-500">Resumen por comuna para identificar donde conviene concentrar presupuesto y cupos.</p>
+                    <p className="text-sm text-slate-500">Resumen por comuna para identificar dónde conviene concentrar presupuesto y qué escuelas quedan fuera por falta de recursos PME.</p>
                   </div>
                   <div className="grid gap-3">
                     {strategicMetrics.territorialSummary.map((item) => (
@@ -574,12 +592,12 @@ export default function App() {
                         </div>
                         <div className="mt-3 grid grid-cols-3 gap-2 text-sm">
                           <div className="rounded-2xl bg-slate-50 px-3 py-2">
-                            <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Pendientes</p>
-                            <p className="mt-1 font-semibold text-brand-red">{formatNumber(item.withoutOuting)}</p>
+                            <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Sin recursos</p>
+                            <p className="mt-1 font-semibold text-brand-red">{formatNumber(item.withoutBudget)}</p>
                           </div>
                           <div className="rounded-2xl bg-slate-50 px-3 py-2">
-                            <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Con salida</p>
-                            <p className="mt-1 font-semibold text-brand-navy">{formatNumber(item.withOuting)}</p>
+                            <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Con recursos</p>
+                            <p className="mt-1 font-semibold text-brand-navy">{formatNumber(item.withBudget)}</p>
                           </div>
                           <div className="rounded-2xl bg-slate-50 px-3 py-2">
                             <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Monto</p>
