@@ -235,9 +235,6 @@ export default function EstablishmentTable({ items, onOpen, strategicMap = {} })
               <th className="sticky top-0 z-10 border-b border-slate-200 bg-slate-50 px-4 py-4 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
                 Observación
               </th>
-              <th className="sticky top-0 z-10 border-b border-slate-200 bg-slate-50 px-4 py-4 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-                Motivo
-              </th>
               <th className="sticky top-0 z-10 border-b border-slate-200 bg-slate-50 px-4 py-4 text-right text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
                 Ver
               </th>
@@ -311,11 +308,6 @@ export default function EstablishmentTable({ items, onOpen, strategicMap = {} })
                 <td className="border-b border-slate-100 px-4 py-4 align-top text-sm text-slate-500">
                   <div className="max-w-sm">
                     <span className="line-clamp-3">{compactText(item.observation)}</span>
-                  </div>
-                </td>
-                <td className="border-b border-slate-100 px-4 py-4 align-top text-sm text-slate-500">
-                  <div className="max-w-[12rem]">
-                    <span className="line-clamp-3">{compactText(item.strategicProfile?.reasons?.[0], 'Sin motivo estrategico')}</span>
                   </div>
                 </td>
                 <td className="border-b border-slate-100 px-4 py-4 align-top text-right">
