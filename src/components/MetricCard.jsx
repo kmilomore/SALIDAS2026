@@ -1,9 +1,9 @@
 export default function MetricCard({ title, value, helper, tone = 'sky' }) {
   const tones = {
-    sky: 'from-sky-600/15 to-white text-sky-900 border-sky-100',
-    amber: 'from-amber-500/15 to-white text-amber-900 border-amber-100',
-    emerald: 'from-emerald-500/15 to-white text-emerald-900 border-emerald-100',
-    coral: 'from-rose-500/15 to-white text-rose-900 border-rose-100',
+    sky: 'from-brand-blue/16 via-white to-brand-mist text-brand-navy border-brand-blue/15',
+    amber: 'from-brand-red/12 via-white to-brand-mist text-brand-red border-brand-red/15',
+    emerald: 'from-brand-navy/14 via-white to-brand-mist text-brand-navy border-brand-navy/15',
+    coral: 'from-brand-red/18 via-white to-brand-mist text-brand-red border-brand-red/20',
   };
 
   return (

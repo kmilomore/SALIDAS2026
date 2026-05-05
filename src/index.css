@@ -7,8 +7,13 @@
 :root {
   color-scheme: light;
   font-family: 'Sora', 'Segoe UI', sans-serif;
-  background-color: #f8fafc;
-  color: #0f172a;
+  background-color: #edf0f5;
+  color: #172033;
+  --color-navy: #25306b;
+  --color-blue: #006bb9;
+  --color-red: #ff1d3d;
+  --color-mist: #edf0f5;
+  --color-indigo: #2c3d9e;
 }
 
 * {
@@ -22,6 +27,9 @@ html {
 body {
   margin: 0;
   min-width: 320px;
+  background:
+    linear-gradient(180deg, rgba(237, 240, 245, 0.92) 0%, rgba(237, 240, 245, 0.96) 100%),
+    url('/auth.webp') center/cover fixed no-repeat;
 }
 
 button,
@@ -35,4 +43,16 @@ select {
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+.line-clamp-3 {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+::selection {
+  background: rgba(0, 107, 185, 0.18);
+  color: #25306b;
 }

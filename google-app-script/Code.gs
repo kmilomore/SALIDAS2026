@@ -49,6 +49,7 @@ function buildDashboardPayload() {
       );
       var observation = pickFirst(row, ['observaciones', 'observacion', 'detalle', 'descripcion']);
       var dimensions = extractDimensions(pickFirst(row, ['dimension', 'dimensión', 'area', 'área']));
+      var year = normalizeYear(pickFirst(row, ['ano', 'año', 'year', 'periodo', 'periodo_ano']));
       var actionCount = parseNumber(pickFirst(row, ['n_acciones', 'n_accion', 'numero_acciones', 'acciones', 'n_acciones_'])) || 0;
       var estimatedBudget = extractMoney(observation);
       var schoolName = pickFirst(establishment, [
@@ -67,6 +68,7 @@ function buildDashboardPayload() {
         level: pickFirst(establishment, ['nivel', 'nivel_ensenanza', 'enseñanza', 'ensenanza', 'tipo']) || 'Sin dato',
         area: pickFirst(establishment, ['area_geografica', 'area', 'zona']) || 'Sin dato',
         rurality: pickFirst(establishment, ['ruralidad', 'rural', 'urbano_rural', 'rural_urbano']) || 'Sin dato',
+        year: year,
         hasPedagogicalOuting: hasPedagogicalOuting,
         actionCount: actionCount,
         dimensions: dimensions,
@@ -83,6 +85,32 @@ function buildDashboardPayload() {
   var dimensionsCatalog = uniqueFlat(records.map(function(item) {
     return item.dimensions;
   }));
+  var yearsCatalog = uniqueFlat(records.map(function(item) {
+    return [item.year];
+  }));
+
+  var yearSummary = yearsCatalog.map(function(year) {
+    var yearRecords = records.filter(function(item) {
+      return item.year === year;
+    });
+
+    return {
+      year: year,
+      totalEstablishments: yearRecords.length,
+      withOutings: yearRecords.filter(function(item) {
+        return item.hasPedagogicalOuting;
+      }).length,
+      withoutOutings: yearRecords.filter(function(item) {
+        return !item.hasPedagogicalOuting;
+      }).length,
+      totalActions: yearRecords.reduce(function(acc, item) {
+        return acc + item.actionCount;
+      }, 0),
+      estimatedBudget: yearRecords.reduce(function(acc, item) {
+        return acc + item.estimatedBudget;
+      }, 0),
+    };
+  });
 
   var summary = {
     totalEstablishments: records.length,
@@ -105,8 +133,10 @@ function buildDashboardPayload() {
     updatedAt: new Date().toISOString(),
     catalogs: {
       dimensions: dimensionsCatalog,
+      years: yearsCatalog,
     },
     summary: summary,
+    yearSummary: yearSummary,
     establishments: records,
   };
 }
@@ -200,6 +230,11 @@ function parseNumber(value) {
     .match(/-?\d+(?:\.\d+)?/);
 
   return normalized ? Number(normalized[0]) : 0;
+}
+
+function normalizeYear(value) {
+  var match = String(value || '').match(/20\d{2}/);
+  return match ? match[0] : 'Sin año';
 }
 
 function extractDimensions(value) {

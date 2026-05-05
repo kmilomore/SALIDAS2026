@@ -4,22 +4,26 @@ export default {
   theme: {
     extend: {
       colors: {
-        ink: '#111827',
-        mist: '#eff6ff',
-        coral: '#ff6b57',
-        teal: '#0f766e',
-        sand: '#fff7ed',
-        slateblue: '#1d4ed8',
+        ink: '#172033',
+        brand: {
+          navy: '#25306B',
+          blue: '#006BB9',
+          red: '#FF1D3D',
+          mist: '#EDF0F5',
+          indigo: '#2C3D9E',
+        },
       },
       fontFamily: {
         sans: ['"Sora"', '"Segoe UI"', 'sans-serif'],
         display: ['"Clash Display"', '"Sora"', 'sans-serif'],
       },
       boxShadow: {
-        soft: '0 20px 60px rgba(15, 23, 42, 0.10)',
+        soft: '0 24px 70px rgba(37, 48, 107, 0.12)',
       },
       backgroundImage: {
-        grid: 'radial-gradient(circle at 1px 1px, rgba(15, 23, 42, 0.08) 1px, transparent 0)',
+        grid: 'radial-gradient(circle at 1px 1px, rgba(37, 48, 107, 0.10) 1px, transparent 0)',
+        'brand-hero': 'linear-gradient(135deg, rgba(37, 48, 107, 0.96) 0%, rgba(44, 61, 158, 0.92) 40%, rgba(0, 107, 185, 0.88) 100%)',
+        'brand-alert': 'linear-gradient(135deg, rgba(255, 29, 61, 0.96) 0%, rgba(237, 240, 245, 0.92) 100%)',
       },
     },
   },
