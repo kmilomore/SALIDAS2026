@@ -95,7 +95,8 @@ export default function App() {
   }, [data, dimension, search, status, year]);
 
   const derivedMetrics = useMemo(() => {
-    const total = filteredItems.length;
+    const totalRecords = filteredItems.length;
+    const totalEstablishments = new Set(filteredItems.map((item) => item.rbd).filter(Boolean)).size;
     const withOutings = filteredItems.filter((item) => item.hasPedagogicalOuting).length;
     const totalActions = filteredItems.reduce((sum, item) => sum + item.actionCount, 0);
     const estimatedBudget = filteredItems.reduce((sum, item) => sum + item.estimatedBudget, 0);
@@ -118,7 +119,7 @@ export default function App() {
 
     const statusChart = [
       { name: 'Con salidas', value: withOutings },
-      { name: 'Sin salidas', value: Math.max(total - withOutings, 0) },
+      { name: 'Sin salidas', value: Math.max(totalRecords - withOutings, 0) },
     ];
 
     const yearChart = (data?.catalogs?.years || []).map((itemYear) => {
@@ -132,7 +133,8 @@ export default function App() {
     });
 
     return {
-      total,
+      totalEstablishments,
+      totalRecords,
       withOutings,
       totalActions,
       estimatedBudget,
@@ -147,7 +149,7 @@ export default function App() {
       <div className="absolute inset-0 bg-[url('/auth.webp')] bg-cover bg-center bg-no-repeat opacity-[0.18]" />
       <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(237,240,245,0.90)_0%,rgba(237,240,245,0.96)_40%,rgba(237,240,245,1)_100%)]" />
 
-      <div className="relative mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8 lg:py-10">
+      <div className="relative w-full px-4 py-6 sm:px-6 lg:px-8 lg:py-10 2xl:px-12">
         <header className="relative overflow-hidden rounded-[2.5rem] border border-white/60 bg-brand-hero px-6 py-8 text-white shadow-soft sm:px-8 lg:px-10 lg:py-10">
           <div className="absolute inset-0 bg-grid bg-[size:20px_20px] opacity-15" />
           <div className="absolute -right-20 top-0 h-64 w-64 rounded-full bg-brand-red/25 blur-3xl" />
@@ -208,8 +210,8 @@ export default function App() {
             <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
               <MetricCard
                 title="Establecimientos"
-                value={formatNumber(derivedMetrics.total)}
-                helper="Resultados considerando filtros activos"
+                value={formatNumber(derivedMetrics.totalEstablishments)}
+                helper="Escuelas unicas considerando filtros activos"
                 tone="sky"
               />
               <MetricCard

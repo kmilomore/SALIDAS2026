@@ -88,6 +88,7 @@ function buildDashboardPayload() {
   var yearsCatalog = uniqueFlat(records.map(function(item) {
     return [item.year];
   }));
+  var totalUniqueEstablishments = countUniqueEstablishments(records);
 
   var yearSummary = yearsCatalog.map(function(year) {
     var yearRecords = records.filter(function(item) {
@@ -96,7 +97,7 @@ function buildDashboardPayload() {
 
     return {
       year: year,
-      totalEstablishments: yearRecords.length,
+      totalEstablishments: countUniqueEstablishments(yearRecords),
       withOutings: yearRecords.filter(function(item) {
         return item.hasPedagogicalOuting;
       }).length,
@@ -113,7 +114,7 @@ function buildDashboardPayload() {
   });
 
   var summary = {
-    totalEstablishments: records.length,
+    totalEstablishments: totalUniqueEstablishments,
     withOutings: records.filter(function(item) {
       return item.hasPedagogicalOuting;
     }).length,
@@ -139,6 +140,20 @@ function buildDashboardPayload() {
     yearSummary: yearSummary,
     establishments: records,
   };
+}
+
+function countUniqueEstablishments(records) {
+  var bucket = {};
+
+  (records || []).forEach(function(item) {
+    if (!item || !item.rbd) {
+      return;
+    }
+
+    bucket[item.rbd] = true;
+  });
+
+  return Object.keys(bucket).length;
 }
 
 function readSheetAsObjects(sheet) {
