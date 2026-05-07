@@ -2,15 +2,8 @@ import { useMemo, useState } from 'react';
 import { Check, Copy, ChevronRight, MapPin, School, SearchX } from 'lucide-react';
 import { compactText, formatCurrency, formatNumber } from '../lib/formatters';
 
-const EMAIL_KEY_CANDIDATES = [
-  'correo',
-  'correo_electronico',
-  'correo_institucional',
-  'mail',
-  'email',
-  'e_mail',
-  'contacto',
-];
+const DIRECTOR_EMAIL_KEYS = ['correo_electronico', 'correo_director', 'correo_directora'];
+const SUBROGANT_EMAIL_KEYS = ['correo_subrogante', 'correo_subrogancia'];
 
 function normalizeText(value) {
   return String(value || '')
@@ -28,21 +21,15 @@ function extractItemEmails(item) {
   const raw = item?.establishmentRaw || {};
   const bucket = new Set();
 
-  EMAIL_KEY_CANDIDATES.forEach((candidate) => {
+  [...DIRECTOR_EMAIL_KEYS, ...SUBROGANT_EMAIL_KEYS].forEach((candidate) => {
     Object.entries(raw).forEach(([key, value]) => {
-      if (!normalizeText(key).includes(candidate)) {
+      if (normalizeText(key) !== candidate) {
         return;
       }
 
       extractEmailsFromText(value).forEach((email) => bucket.add(email));
     });
   });
-
-  if (!bucket.size) {
-    Object.values(raw).forEach((value) => {
-      extractEmailsFromText(value).forEach((email) => bucket.add(email));
-    });
-  }
 
   return [...bucket];
 }
@@ -200,10 +187,10 @@ export default function EstablishmentTable({ items, onOpen, strategicMap = {} })
           >
             {copyState === 'success' ? <Check size={14} /> : <Copy size={14} />}
             {copyState === 'success'
-              ? `Correos copiados (${formatNumber(visibleEmails.length)})`
+              ? `Correos dirección copiados (${formatNumber(visibleEmails.length)})`
               : copyState === 'error'
                 ? 'No se pudo copiar'
-                : `Copiar correos visibles (${formatNumber(visibleEmails.length)})`}
+                : `Copiar correos dirección (${formatNumber(visibleEmails.length)})`}
           </button>
         </div>
       </div>
