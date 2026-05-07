@@ -1,12 +1,50 @@
 import { useMemo, useState } from 'react';
-import { ChevronRight, MapPin, School, SearchX } from 'lucide-react';
+import { Check, Copy, ChevronRight, MapPin, School, SearchX } from 'lucide-react';
 import { compactText, formatCurrency, formatNumber } from '../lib/formatters';
+
+const EMAIL_KEY_CANDIDATES = [
+  'correo',
+  'correo_electronico',
+  'correo_institucional',
+  'mail',
+  'email',
+  'e_mail',
+  'contacto',
+];
 
 function normalizeText(value) {
   return String(value || '')
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase();
+}
+
+function extractEmailsFromText(value) {
+  const matches = String(value || '').match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi);
+  return matches ? matches.map((item) => item.toLowerCase()) : [];
+}
+
+function extractItemEmails(item) {
+  const raw = item?.establishmentRaw || {};
+  const bucket = new Set();
+
+  EMAIL_KEY_CANDIDATES.forEach((candidate) => {
+    Object.entries(raw).forEach(([key, value]) => {
+      if (!normalizeText(key).includes(candidate)) {
+        return;
+      }
+
+      extractEmailsFromText(value).forEach((email) => bucket.add(email));
+    });
+  });
+
+  if (!bucket.size) {
+    Object.values(raw).forEach((value) => {
+      extractEmailsFromText(value).forEach((email) => bucket.add(email));
+    });
+  }
+
+  return [...bucket];
 }
 
 export default function EstablishmentTable({ items, onOpen, strategicMap = {} }) {
@@ -16,6 +54,7 @@ export default function EstablishmentTable({ items, onOpen, strategicMap = {} })
   const [actionsFilter, setActionsFilter] = useState('all');
   const [coverage2025Filter, setCoverage2025Filter] = useState('all');
   const [sortBy, setSortBy] = useState('priority');
+  const [copyState, setCopyState] = useState('idle');
 
   const yearOptions = useMemo(
     () => [...new Set(items.map((item) => item.year).filter(Boolean))].sort(),
@@ -93,6 +132,34 @@ export default function EstablishmentTable({ items, onOpen, strategicMap = {} })
     });
   }, [filteredItems, sortBy]);
 
+  const visibleEmails = useMemo(() => {
+    const bucket = new Set();
+
+    sortedItems.forEach((item) => {
+      extractItemEmails(item).forEach((email) => bucket.add(email));
+    });
+
+    return [...bucket].sort((left, right) => left.localeCompare(right, 'es'));
+  }, [sortedItems]);
+
+  const copyVisibleEmails = async () => {
+    if (!visibleEmails.length || !navigator?.clipboard?.writeText) {
+      setCopyState('error');
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(visibleEmails.join('; '));
+      setCopyState('success');
+    } catch (error) {
+      setCopyState('error');
+    }
+
+    window.setTimeout(() => {
+      setCopyState('idle');
+    }, 2400);
+  };
+
   if (!items.length) {
     return (
       <div className="rounded-[2rem] border border-dashed border-slate-300 bg-[linear-gradient(180deg,#f8fafc_0%,#ffffff_100%)] p-10 text-center text-slate-500">
@@ -112,11 +179,32 @@ export default function EstablishmentTable({ items, onOpen, strategicMap = {} })
           <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">Detalle operativo</p>
           <h3 className="mt-1 text-lg font-semibold text-slate-900">Tabla de establecimientos</h3>
         </div>
-        <div className="flex flex-wrap gap-2 text-xs font-medium text-slate-600">
+        <div className="flex flex-wrap items-center gap-2 text-xs font-medium text-slate-600">
           <span className="rounded-full bg-slate-100 px-3 py-1">{formatNumber(sortedItems.length)} registros visibles</span>
           <span className="rounded-full bg-emerald-50 px-3 py-1 text-emerald-700">
             {formatNumber(sortedItems.filter((item) => item.hasPedagogicalOuting).length)} con salida
           </span>
+          <button
+            type="button"
+            onClick={copyVisibleEmails}
+            disabled={!visibleEmails.length}
+            className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 transition ${
+              visibleEmails.length
+                ? copyState === 'success'
+                  ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                  : copyState === 'error'
+                    ? 'border-red-200 bg-red-50 text-red-700'
+                    : 'border-slate-200 bg-white text-slate-700 hover:border-sky-200 hover:bg-sky-50 hover:text-sky-700'
+                : 'cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400'
+            }`}
+          >
+            {copyState === 'success' ? <Check size={14} /> : <Copy size={14} />}
+            {copyState === 'success'
+              ? `Correos copiados (${formatNumber(visibleEmails.length)})`
+              : copyState === 'error'
+                ? 'No se pudo copiar'
+                : `Copiar correos visibles (${formatNumber(visibleEmails.length)})`}
+          </button>
         </div>
       </div>
 
