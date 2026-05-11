@@ -518,8 +518,8 @@ export default function App() {
             >
               <EstablishmentTable
                 items={filteredItems}
+                rawItems={data?.establishments || []}
                 onOpen={setSelectedItem}
-                strategicMap={strategicMap}
               />
             </SectionCard>
           </div>

@@ -34,7 +34,11 @@ function extractItemEmails(item) {
   return [...bucket];
 }
 
-export default function EstablishmentTable({ items, onOpen, strategicMap = {} }) {
+function countUniqueRbd(items) {
+  return new Set((items || []).map((item) => item?.rbd).filter(Boolean)).size;
+}
+
+export default function EstablishmentTable({ items, rawItems = items, onOpen }) {
   const [schoolFilter, setSchoolFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [yearFilter, setYearFilter] = useState('all');
@@ -115,6 +119,20 @@ export default function EstablishmentTable({ items, onOpen, strategicMap = {} })
 
     return [...bucket].sort((left, right) => left.localeCompare(right, 'es'));
   }, [sortedItems]);
+
+  const auditMetrics = useMemo(() => {
+    const records2026 = (rawItems || []).filter((item) => item.year === '2026');
+    const withOutings2026 = records2026.filter((item) => item.hasPedagogicalOuting);
+    const withoutPace2026 = withOutings2026.filter((item) => !item.hasPace2026);
+    const notCovered2025 = withoutPace2026.filter((item) => !item.wasCovered2025);
+
+    return {
+      total2026: countUniqueRbd(records2026),
+      withOutings2026: countUniqueRbd(withOutings2026),
+      withoutPace2026: countUniqueRbd(withoutPace2026),
+      notCovered2025: countUniqueRbd(notCovered2025),
+    };
+  }, [rawItems]);
 
   const copyVisibleEmails = async () => {
     if (!visibleEmails.length || !navigator?.clipboard?.writeText) {
@@ -275,6 +293,29 @@ export default function EstablishmentTable({ items, onOpen, strategicMap = {} })
             <option value="status">Estado</option>
           </select>
         </label>
+      </div>
+
+      <div className="grid gap-3 border-b border-slate-100 bg-white px-5 py-4 md:grid-cols-2 xl:grid-cols-4">
+        <div className="rounded-2xl bg-slate-50 px-4 py-3">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Auditoría 2026</p>
+          <p className="mt-2 text-2xl font-semibold text-slate-900">{formatNumber(auditMetrics.total2026)}</p>
+          <p className="mt-1 text-sm text-slate-500">Escuelas 2026 cargadas desde la API</p>
+        </div>
+        <div className="rounded-2xl bg-emerald-50 px-4 py-3">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700">Columna B = Sí</p>
+          <p className="mt-2 text-2xl font-semibold text-emerald-800">{formatNumber(auditMetrics.withOutings2026)}</p>
+          <p className="mt-1 text-sm text-emerald-700/80">Escuelas 2026 con salida declarada</p>
+        </div>
+        <div className="rounded-2xl bg-sky-50 px-4 py-3">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-sky-700">Sin PACE</p>
+          <p className="mt-2 text-2xl font-semibold text-sky-800">{formatNumber(auditMetrics.withoutPace2026)}</p>
+          <p className="mt-1 text-sm text-sky-700/80">Escuelas 2026 con salida y sin PACE beneficiado</p>
+        </div>
+        <div className="rounded-2xl bg-amber-50 px-4 py-3">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-amber-700">Sin cobertura 2025</p>
+          <p className="mt-2 text-2xl font-semibold text-amber-800">{formatNumber(auditMetrics.notCovered2025)}</p>
+          <p className="mt-1 text-sm text-amber-700/80">Escuelas 2026 con salida, sin PACE y no cubiertas en 2025</p>
+        </div>
       </div>
 
       <div className="overflow-x-auto">
