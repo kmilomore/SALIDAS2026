@@ -38,6 +38,7 @@ export default function EstablishmentTable({ items, onOpen, strategicMap = {} })
   const [schoolFilter, setSchoolFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [yearFilter, setYearFilter] = useState('all');
+  const [paceFilter, setPaceFilter] = useState('all');
   const [actionsFilter, setActionsFilter] = useState('all');
   const [coverage2025Filter, setCoverage2025Filter] = useState('all');
   const [sortBy, setSortBy] = useState('priority');
@@ -72,13 +73,16 @@ export default function EstablishmentTable({ items, onOpen, strategicMap = {} })
         || (statusFilter === 'without' && !item.hasPedagogicalOuting);
 
       const matchesYear = yearFilter === 'all' || item.year === yearFilter;
+      const matchesPace = paceFilter === 'all'
+        || (paceFilter === 'with' && item.hasPace2026)
+        || (paceFilter === 'without' && item.year === '2026' && !item.hasPace2026);
       const matchesActions = actionsFilter === 'all' || String(item.actionCount) === actionsFilter;
       const matchesCoverage2025 = coverage2025Filter === 'all'
         || (coverage2025Filter === 'not-covered' && !item.wasCovered2025);
 
-      return matchesSchool && matchesStatus && matchesYear && matchesActions && matchesCoverage2025;
+      return matchesSchool && matchesStatus && matchesYear && matchesPace && matchesActions && matchesCoverage2025;
     });
-  }, [actionsFilter, coverage2025Filter, itemsWithProfiles, schoolFilter, statusFilter, yearFilter]);
+  }, [actionsFilter, coverage2025Filter, itemsWithProfiles, paceFilter, schoolFilter, statusFilter, yearFilter]);
 
   const sortedItems = useMemo(() => {
     const priorityOrder = { Alta: 3, Media: 2, Baja: 1 };
@@ -195,7 +199,7 @@ export default function EstablishmentTable({ items, onOpen, strategicMap = {} })
         </div>
       </div>
 
-      <div className="grid gap-4 border-b border-slate-100 bg-slate-50/70 px-5 py-4 lg:grid-cols-6">
+      <div className="grid gap-4 border-b border-slate-100 bg-slate-50/70 px-5 py-4 lg:grid-cols-7">
         <label className="flex flex-col gap-2">
           <span className="text-sm font-medium text-slate-700">Escuela o RBD</span>
           <input
@@ -232,6 +236,19 @@ export default function EstablishmentTable({ items, onOpen, strategicMap = {} })
                 {year}
               </option>
             ))}
+          </select>
+        </label>
+
+        <label className="flex flex-col gap-2">
+          <span className="text-sm font-medium text-slate-700">PACE 2026</span>
+          <select
+            className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-brand-blue focus:ring-4 focus:ring-brand-blue/10"
+            value={paceFilter}
+            onChange={(event) => setPaceFilter(event.target.value)}
+          >
+            <option value="all">Todos</option>
+            <option value="with">Beneficiado</option>
+            <option value="without">No beneficiado</option>
           </select>
         </label>
 
@@ -300,6 +317,9 @@ export default function EstablishmentTable({ items, onOpen, strategicMap = {} })
               </th>
               <th className="sticky top-0 z-10 border-b border-slate-200 bg-slate-50 px-4 py-4 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
                 Año
+              </th>
+              <th className="sticky top-0 z-10 border-b border-slate-200 bg-slate-50 px-4 py-4 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                PACE 2026
               </th>
               <th className="sticky top-0 z-10 border-b border-slate-200 bg-slate-50 px-4 py-4 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
                 Acciones
@@ -374,6 +394,19 @@ export default function EstablishmentTable({ items, onOpen, strategicMap = {} })
                     {compactText(item.year, 'Sin año')}
                   </span>
                 </td>
+                <td className="border-b border-slate-100 px-4 py-4 align-top">
+                  <span
+                    className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
+                      item.year !== '2026'
+                        ? 'bg-slate-100 text-slate-500'
+                        : item.hasPace2026
+                          ? 'bg-sky-100 text-sky-700'
+                          : 'bg-slate-200 text-slate-600'
+                    }`}
+                  >
+                    {item.year !== '2026' ? 'No aplica' : item.hasPace2026 ? 'Beneficiado' : 'No beneficiado'}
+                  </span>
+                </td>
                 <td className="border-b border-slate-100 px-4 py-4 align-top text-sm font-semibold text-slate-800">
                   {formatNumber(item.actionCount)}
                 </td>
@@ -403,7 +436,7 @@ export default function EstablishmentTable({ items, onOpen, strategicMap = {} })
         {!sortedItems.length ? (
           <div className="border-t border-slate-100 px-6 py-10 text-center text-slate-500">
             <p className="text-base font-medium text-slate-700">No hay resultados para los filtros del panel de detalles.</p>
-            <p className="mt-2 text-sm text-slate-500">Ajusta escuela, estado, año o acciones para volver a mostrar registros.</p>
+            <p className="mt-2 text-sm text-slate-500">Ajusta escuela, estado, año, PACE o acciones para volver a mostrar registros.</p>
           </div>
         ) : null}
       </div>

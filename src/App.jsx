@@ -22,10 +22,6 @@ import { buildStrategicProfiles, resolvePlanningYear } from './lib/strategic';
 
 const PIE_COLORS = ['#25306B', '#006BB9', '#FF1D3D', '#EDF0F5'];
 
-function formatPercent(value) {
-  return `${Math.round((Number(value) || 0) * 100)}%`;
-}
-
 function normalizeText(value) {
   return String(value || '')
     .normalize('NFD')
@@ -319,33 +315,6 @@ export default function App() {
 
         {!loading && !error && data ? (
           <div className="mt-8 space-y-8">
-            <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-              <MetricCard
-                title="Con recursos PME"
-                value={formatNumber(strategicMetrics.tramitableCount)}
-                helper={`Escuelas con recursos asociados en su PME para ${effectivePlanningYear}`}
-                tone="coral"
-              />
-              <MetricCard
-                title="Sin recursos PME"
-                value={formatNumber(strategicMetrics.nonTramitableCount)}
-                helper="Escuelas que no pueden tramitarse por falta de recursos asociados"
-                tone="amber"
-              />
-              <MetricCard
-                title={`Priorizables ${effectivePlanningYear}`}
-                value={formatNumber(strategicMetrics.pendingCount)}
-                helper="Escuelas con recursos PME y sin salida en el último PME disponible"
-                tone="emerald"
-              />
-              <MetricCard
-                title="No cubiertas 2025"
-                value={formatNumber(strategicMetrics.notCovered2025Count)}
-                helper="Base priorizable que no fue abordada durante 2025"
-                tone="sky"
-              />
-            </section>
-
             <section className="grid gap-4 md:grid-cols-1 xl:grid-cols-1">
               <MetricCard
                 title="Criterio 2026"
@@ -355,7 +324,7 @@ export default function App() {
               />
             </section>
 
-            <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
               <MetricCard
                 title="Establecimientos"
                 value={formatNumber(derivedMetrics.totalEstablishments)}
@@ -373,12 +342,6 @@ export default function App() {
                 value={formatNumber(derivedMetrics.totalActions)}
                 helper="Total de acciones declaradas"
                 tone="amber"
-              />
-              <MetricCard
-                title="Monto estimado"
-                value={formatCurrency(derivedMetrics.estimatedBudget)}
-                helper="Suma detectada desde observaciones"
-                tone="coral"
               />
             </section>
 
@@ -429,188 +392,6 @@ export default function App() {
                       )}
                     </tbody>
                   </table>
-                </div>
-              </div>
-            </SectionCard>
-
-            <SectionCard
-              title="Seguimiento de salidas 2025"
-              description="Compara lo solicitado en el PME 2025, lo efectivamente concretado y las escuelas con más salidas registradas en la hoja 2025."
-            >
-              <div className="space-y-6">
-                <div className="rounded-[1.75rem] border border-brand-mist bg-white p-4 shadow-sm">
-                  <div className="mb-3">
-                    <p className="text-sm font-semibold text-brand-navy">Solicitado vs concretado en 2025</p>
-                    <p className="text-sm text-slate-500">Escuelas que declararon salida en su PME 2025 y cruce con la hoja de cobertura real 2025.</p>
-                  </div>
-                  <div className="h-72">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={derivedMetrics.pme2025SummaryChart} margin={{ top: 10, right: 10, bottom: 25, left: 0 }}>
-                        <CartesianGrid vertical={false} stroke="#d7ddea" />
-                        <XAxis dataKey="name" angle={-12} textAnchor="end" interval={0} height={70} tick={{ fontSize: 12 }} />
-                        <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
-                        <Tooltip />
-                        <Bar dataKey="value" radius={[12, 12, 0, 0]}>
-                          {derivedMetrics.pme2025SummaryChart.map((entry) => (
-                            <Cell
-                              key={entry.name}
-                              fill={entry.name === 'Concretado en 2025' ? '#006BB9' : entry.name === 'No concretado en 2025' ? '#FF1D3D' : '#25306B'}
-                            />
-                          ))}
-                        </Bar>
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
-
-                <div className="rounded-[1.75rem] border border-brand-mist bg-white p-4 shadow-sm">
-                  <div className="mb-3">
-                    <p className="text-sm font-semibold text-brand-navy">Cobertura total de escuelas 2025</p>
-                    <p className="text-sm text-slate-500">Total de escuelas que quedaron con cobertura y sin cobertura según el cruce con la hoja 2025.</p>
-                  </div>
-                  <div className="h-64">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={derivedMetrics.pme2025CoverageChart} margin={{ top: 10, right: 10, bottom: 20, left: 0 }}>
-                        <CartesianGrid vertical={false} stroke="#d7ddea" />
-                        <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-                        <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
-                        <Tooltip />
-                        <Bar dataKey="value" radius={[12, 12, 0, 0]}>
-                          {derivedMetrics.pme2025CoverageChart.map((entry) => (
-                            <Cell key={entry.name} fill={entry.name.includes('sin') ? '#FF1D3D' : '#006BB9'} />
-                          ))}
-                        </Bar>
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
-
-                <div className="grid gap-4 md:grid-cols-3">
-                  {derivedMetrics.pme2025SummaryChart.map((item) => (
-                    <div key={item.name} className="rounded-[1.5rem] border border-slate-200 bg-slate-50 p-4">
-                      <p className="text-xs uppercase tracking-[0.18em] text-slate-400">{item.name}</p>
-                      <p className="mt-2 text-2xl font-semibold text-brand-navy">{formatNumber(item.value)}</p>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="rounded-[1.75rem] border border-brand-mist bg-white p-4 shadow-sm">
-                  <div className="mb-3">
-                    <p className="text-sm font-semibold text-brand-navy">Escuelas con más salidas pedagógicas registradas en 2025</p>
-                    <p className="text-sm text-slate-500">Top de establecimientos según cuántas veces se repite su RBD en la hoja 2025. Cada repetición equivale a una salida pedagógica realizada.</p>
-                  </div>
-                  <div className="h-80">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={derivedMetrics.pme2025SchoolsChart} layout="vertical" margin={{ top: 10, right: 10, bottom: 0, left: 30 }}>
-                        <CartesianGrid horizontal={false} stroke="#d7ddea" />
-                        <XAxis type="number" allowDecimals={false} tick={{ fontSize: 12 }} />
-                        <YAxis dataKey="name" type="category" width={180} tick={{ fontSize: 12 }} />
-                        <Tooltip formatter={(value) => [formatNumber(value), 'Salidas registradas en 2025']} />
-                        <Bar dataKey="outings" radius={[0, 12, 12, 0]}>
-                          {derivedMetrics.pme2025SchoolsChart.map((entry) => (
-                            <Cell key={`${entry.name}-${entry.status}`} fill="#006BB9" />
-                          ))}
-                        </Bar>
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                  <div className="mt-4 grid gap-2">
-                    {derivedMetrics.pme2025SchoolsChart.map((item) => (
-                      <div key={`${item.name}-${item.commune}`} className="flex items-center justify-between rounded-2xl bg-slate-50 px-4 py-3 text-sm">
-                        <div>
-                          <p className="font-medium text-slate-900">{item.name}</p>
-                          <p className="text-slate-500">{item.commune}</p>
-                        </div>
-                        <div className="text-right">
-                          <p className="font-semibold text-brand-navy">{formatNumber(item.outings)} salidas</p>
-                          <p className="text-xs text-sky-700">{item.status}</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </SectionCard>
-
-            <SectionCard
-              title="Brechas territoriales"
-              description="Lectura estratégica de recursos PME por comuna, ruralidad y territorios más rezagados."
-            >
-              <div className="grid gap-8 xl:grid-cols-[1.1fr_0.9fr]">
-                <div className="space-y-6">
-                  <div className="rounded-[1.75rem] border border-brand-mist bg-white p-4 shadow-sm">
-                    <div className="mb-3">
-                      <p className="text-sm font-semibold text-brand-navy">Brecha por comuna</p>
-                      <p className="text-sm text-slate-500">Comparación entre escuelas con y sin recursos PME asociados en {effectivePlanningYear}.</p>
-                    </div>
-                    <div className="h-72">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={strategicMetrics.communeCoverage} margin={{ top: 10, right: 10, bottom: 25, left: 0 }}>
-                          <CartesianGrid vertical={false} stroke="#d7ddea" />
-                          <XAxis dataKey="name" angle={-18} textAnchor="end" interval={0} height={70} tick={{ fontSize: 12 }} />
-                          <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
-                          <Tooltip />
-                          <Bar dataKey="withBudget" name="Con recursos PME" radius={[10, 10, 0, 0]} fill="#25306B" />
-                          <Bar dataKey="withoutBudget" name="Sin recursos PME" radius={[10, 10, 0, 0]} fill="#FF1D3D" />
-                        </BarChart>
-                      </ResponsiveContainer>
-                    </div>
-                  </div>
-
-                  <div className="rounded-[1.75rem] border border-brand-mist bg-white p-4 shadow-sm">
-                    <div className="mb-3">
-                      <p className="text-sm font-semibold text-brand-navy">Brecha por ruralidad</p>
-                      <p className="text-sm text-slate-500">Mide qué parte de la base sí tiene recursos PME y cuál queda fuera por falta de registro.</p>
-                    </div>
-                    <div className="h-64">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={strategicMetrics.ruralityCoverage} margin={{ top: 10, right: 10, bottom: 0, left: 0 }}>
-                          <CartesianGrid vertical={false} stroke="#d7ddea" />
-                          <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-                          <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
-                          <Tooltip />
-                          <Bar dataKey="withBudget" name="Con recursos PME" radius={[10, 10, 0, 0]} fill="#006BB9" />
-                          <Bar dataKey="withoutBudget" name="Sin recursos PME" radius={[10, 10, 0, 0]} fill="#FF1D3D" />
-                        </BarChart>
-                      </ResponsiveContainer>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="rounded-[1.75rem] bg-[linear-gradient(180deg,#f7f9fc_0%,#edf0f5_100%)] p-4">
-                  <div className="mb-4">
-                    <p className="text-sm font-semibold text-brand-navy">Radar territorial</p>
-                    <p className="text-sm text-slate-500">Resumen por comuna para identificar dónde conviene concentrar presupuesto y qué escuelas quedan fuera por falta de recursos PME.</p>
-                  </div>
-                  <div className="grid gap-3">
-                    {strategicMetrics.territorialSummary.map((item) => (
-                      <div key={item.name} className="rounded-2xl bg-white p-4 shadow-sm">
-                        <div className="flex items-center justify-between gap-3">
-                          <div>
-                            <p className="font-semibold text-slate-900">{item.name}</p>
-                            <p className="mt-1 text-sm text-slate-500">{formatPercent(item.coverageRate)} de cobertura</p>
-                          </div>
-                          <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
-                            {formatNumber(item.total)} escuelas
-                          </span>
-                        </div>
-                        <div className="mt-3 grid grid-cols-3 gap-2 text-sm">
-                          <div className="rounded-2xl bg-slate-50 px-3 py-2">
-                            <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Sin recursos</p>
-                            <p className="mt-1 font-semibold text-brand-red">{formatNumber(item.withoutBudget)}</p>
-                          </div>
-                          <div className="rounded-2xl bg-slate-50 px-3 py-2">
-                            <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Con recursos</p>
-                            <p className="mt-1 font-semibold text-brand-navy">{formatNumber(item.withBudget)}</p>
-                          </div>
-                          <div className="rounded-2xl bg-slate-50 px-3 py-2">
-                            <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Monto</p>
-                            <p className="mt-1 font-semibold text-slate-700">{formatCurrency(item.estimatedBudget)}</p>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
                 </div>
               </div>
             </SectionCard>

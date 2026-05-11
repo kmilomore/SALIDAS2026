@@ -69,8 +69,11 @@ function buildDashboardPayload() {
       var observation = pickFirst(row, ['observaciones', 'observacion', 'detalle', 'descripcion']);
       var dimensions = extractDimensions(pickFirst(row, ['dimension', 'dimensión', 'area', 'área']));
       var year = normalizeYear(pickFirst(row, ['ano', 'año', 'year', 'periodo', 'periodo_ano']));
+      var paceValue = pickFirst(row, ['pace', 'pace_2026', 'beneficio_pace', 'beneficiado_pace'])
+        || pickFirst(establishment, ['pace', 'pace_2026', 'beneficio_pace', 'beneficiado_pace']);
       var actionCount = parseNumber(pickFirst(row, ['n_acciones', 'n_accion', 'numero_acciones', 'acciones', 'n_acciones_'])) || 0;
       var estimatedBudget = extractMoney(observation);
+      var hasPace2026 = year === '2026' && parseBooleanFlag(paceValue);
       var schoolName = pickFirst(establishment, [
         'nombre_establecimiento',
         'establecimiento',
@@ -88,6 +91,7 @@ function buildDashboardPayload() {
         area: pickFirst(establishment, ['area_geografica', 'area', 'zona']) || 'Sin dato',
         rurality: pickFirst(establishment, ['ruralidad', 'rural', 'urbano_rural', 'rural_urbano']) || 'Sin dato',
         year: year,
+        hasPace2026: hasPace2026,
         wasCovered2025: hasRbdLookupMatch(covered2025Map, rawRbd),
         covered2025Count: getRbdLookupCount(covered2025CountMap, rawRbd),
         hasPedagogicalOuting: hasPedagogicalOuting,
