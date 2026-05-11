@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Check, Copy, ChevronRight, MapPin, School, SearchX } from 'lucide-react';
-import { compactText, formatCurrency, formatNumber } from '../lib/formatters';
+import { compactText, formatNumber } from '../lib/formatters';
 
 const DIRECTOR_EMAIL_KEYS = ['correo_electronico', 'correo_director', 'correo_directora'];
 const SUBROGANT_EMAIL_KEYS = ['correo_subrogante', 'correo_subrogancia'];
@@ -10,33 +10,6 @@ function normalizeText(value) {
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase();
-}
-
-function parseBooleanFlag(value) {
-  const normalized = String(value || '')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase()
-    .trim();
-
-  return ['si', 's', 'yes', 'true', '1'].includes(normalized);
-}
-
-function hasDeclaredPedagogicalOuting(item) {
-  const raw = item?.analysisRaw || {};
-  return parseBooleanFlag(
-    raw.si ?? raw.salidas ?? raw.tiene_salida ?? raw.tiene_salidas ?? raw.salida_pedagogica,
-  );
-}
-
-function hasPedagogicalOutingForTable(item) {
-  if (hasDeclaredPedagogicalOuting(item)) {
-    return true;
-  }
-
-  return Array.isArray(item?.dimensions)
-    && item.dimensions.length > 0
-    && Number(item?.actionCount) > 0;
 }
 
 function extractEmailsFromText(value) {
@@ -68,7 +41,7 @@ export default function EstablishmentTable({ items, onOpen, strategicMap = {} })
   const [paceFilter, setPaceFilter] = useState('all');
   const [actionsFilter, setActionsFilter] = useState('all');
   const [coverage2025Filter, setCoverage2025Filter] = useState('all');
-  const [sortBy, setSortBy] = useState('priority');
+  const [sortBy, setSortBy] = useState('actions');
   const [copyState, setCopyState] = useState('idle');
 
   const yearOptions = useMemo(
@@ -82,23 +55,17 @@ export default function EstablishmentTable({ items, onOpen, strategicMap = {} })
     [items],
   );
 
-  const itemsWithProfiles = useMemo(
-    () => items.map((item) => ({ ...item, strategicProfile: strategicMap[item.rbd] || null })),
-    [items, strategicMap],
-  );
-
   const filteredItems = useMemo(() => {
     const normalizedSchoolFilter = normalizeText(schoolFilter);
 
-    return itemsWithProfiles.filter((item) => {
-      const hasPedagogicalOuting = hasPedagogicalOutingForTable(item);
+    return items.filter((item) => {
       const matchesSchool = !normalizedSchoolFilter
         || normalizeText(item.name).includes(normalizedSchoolFilter)
         || normalizeText(item.rbd).includes(normalizedSchoolFilter);
 
       const matchesStatus = statusFilter === 'all'
-        || (statusFilter === 'with' && hasPedagogicalOuting)
-        || (statusFilter === 'without' && !hasPedagogicalOuting);
+        || (statusFilter === 'with' && item.hasPedagogicalOuting)
+        || (statusFilter === 'without' && !item.hasPedagogicalOuting);
 
       const matchesYear = yearFilter === 'all' || item.year === yearFilter;
       const matchesPace = paceFilter === 'all'
@@ -110,21 +77,13 @@ export default function EstablishmentTable({ items, onOpen, strategicMap = {} })
 
       return matchesSchool && matchesStatus && matchesYear && matchesPace && matchesActions && matchesCoverage2025;
     });
-  }, [actionsFilter, coverage2025Filter, itemsWithProfiles, paceFilter, schoolFilter, statusFilter, yearFilter]);
+  }, [actionsFilter, coverage2025Filter, items, paceFilter, schoolFilter, statusFilter, yearFilter]);
 
   const sortedItems = useMemo(() => {
-    const priorityOrder = { Alta: 3, Media: 2, Baja: 1 };
-
     return [...filteredItems].sort((left, right) => {
-      const leftProfile = left.strategicProfile || {};
-      const rightProfile = right.strategicProfile || {};
-
       let comparison = 0;
 
       switch (sortBy) {
-        case 'budget':
-          comparison = (right.estimatedBudget || 0) - (left.estimatedBudget || 0);
-          break;
         case 'actions':
           comparison = (right.actionCount || 0) - (left.actionCount || 0);
           break;
@@ -134,12 +93,8 @@ export default function EstablishmentTable({ items, onOpen, strategicMap = {} })
         case 'status':
           comparison = Number(left.hasPedagogicalOuting) - Number(right.hasPedagogicalOuting);
           break;
-        case 'priority':
         default:
-          comparison = (priorityOrder[rightProfile.priority] || 0) - (priorityOrder[leftProfile.priority] || 0);
-          if (comparison === 0) {
-            comparison = (right.actionCount || 0) - (left.actionCount || 0);
-          }
+          comparison = (right.actionCount || 0) - (left.actionCount || 0);
           break;
       }
 
@@ -201,7 +156,7 @@ export default function EstablishmentTable({ items, onOpen, strategicMap = {} })
         <div className="flex flex-wrap items-center gap-2 text-xs font-medium text-slate-600">
           <span className="rounded-full bg-slate-100 px-3 py-1">{formatNumber(sortedItems.length)} registros visibles</span>
           <span className="rounded-full bg-emerald-50 px-3 py-1 text-emerald-700">
-            {formatNumber(sortedItems.filter((item) => hasPedagogicalOutingForTable(item)).length)} con salida
+            {formatNumber(sortedItems.filter((item) => item.hasPedagogicalOuting).length)} con salida
           </span>
           <button
             type="button"
@@ -315,8 +270,6 @@ export default function EstablishmentTable({ items, onOpen, strategicMap = {} })
             value={sortBy}
             onChange={(event) => setSortBy(event.target.value)}
           >
-            <option value="priority">Prioridad</option>
-            <option value="budget">Monto</option>
             <option value="actions">Acciones</option>
             <option value="commune">Comuna</option>
             <option value="status">Estado</option>
@@ -341,9 +294,6 @@ export default function EstablishmentTable({ items, onOpen, strategicMap = {} })
                 Estado
               </th>
               <th className="sticky top-0 z-10 border-b border-slate-200 bg-slate-50 px-4 py-4 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-                Prioridad
-              </th>
-              <th className="sticky top-0 z-10 border-b border-slate-200 bg-slate-50 px-4 py-4 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
                 Año
               </th>
               <th className="sticky top-0 z-10 border-b border-slate-200 bg-slate-50 px-4 py-4 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
@@ -351,12 +301,6 @@ export default function EstablishmentTable({ items, onOpen, strategicMap = {} })
               </th>
               <th className="sticky top-0 z-10 border-b border-slate-200 bg-slate-50 px-4 py-4 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
                 Acciones
-              </th>
-              <th className="sticky top-0 z-10 border-b border-slate-200 bg-slate-50 px-4 py-4 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-                Monto
-              </th>
-              <th className="sticky top-0 z-10 border-b border-slate-200 bg-slate-50 px-4 py-4 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-                Observación
               </th>
               <th className="sticky top-0 z-10 border-b border-slate-200 bg-slate-50 px-4 py-4 text-right text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
                 Ver
@@ -398,23 +342,10 @@ export default function EstablishmentTable({ items, onOpen, strategicMap = {} })
                 <td className="border-b border-slate-100 px-4 py-4 align-top">
                   <span
                     className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
-                      hasPedagogicalOutingForTable(item) ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'
+                      item.hasPedagogicalOuting ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'
                     }`}
                   >
-                    {hasPedagogicalOutingForTable(item) ? 'Con salida' : 'Sin salida'}
-                  </span>
-                </td>
-                <td className="border-b border-slate-100 px-4 py-4 align-top">
-                  <span
-                    className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
-                      item.strategicProfile?.priority === 'Alta'
-                        ? 'bg-red-100 text-red-700'
-                        : item.strategicProfile?.priority === 'Media'
-                          ? 'bg-amber-100 text-amber-700'
-                          : 'bg-slate-100 text-slate-700'
-                    }`}
-                  >
-                    {item.strategicProfile?.priority || 'Sin dato'}
+                    {item.hasPedagogicalOuting ? 'Con salida' : 'Sin salida'}
                   </span>
                 </td>
                 <td className="border-b border-slate-100 px-4 py-4 align-top">
@@ -437,14 +368,6 @@ export default function EstablishmentTable({ items, onOpen, strategicMap = {} })
                 </td>
                 <td className="border-b border-slate-100 px-4 py-4 align-top text-sm font-semibold text-slate-800">
                   {formatNumber(item.actionCount)}
-                </td>
-                <td className="border-b border-slate-100 px-4 py-4 align-top text-sm font-semibold text-amber-700">
-                  {formatCurrency(item.estimatedBudget)}
-                </td>
-                <td className="border-b border-slate-100 px-4 py-4 align-top text-sm text-slate-500">
-                  <div className="max-w-sm">
-                    <span className="line-clamp-3">{compactText(item.observation)}</span>
-                  </div>
                 </td>
                 <td className="border-b border-slate-100 px-4 py-4 align-top text-right">
                   <button
