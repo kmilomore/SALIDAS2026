@@ -63,15 +63,14 @@ function buildDashboardPayload() {
       }
 
       var establishment = findByRbdLookup(establishmentsMap, rawRbd) || {};
-      var hasPedagogicalOuting = parseBooleanFlag(
-        pickFirst(row, ['si', 'salidas', 'tiene_salida', 'tiene_salidas', 'salida_pedagogica'])
-      );
+      var outingDeclaration = resolvePedagogicalOutingDeclaration(row);
+      var hasPedagogicalOuting = outingDeclaration.hasPedagogicalOuting;
       var observation = pickFirst(row, ['observaciones', 'observacion', 'detalle', 'descripcion']);
-      var dimensions = extractDimensions(pickFirst(row, ['dimension', 'dimensión', 'area', 'área']));
+      var dimensions = outingDeclaration.dimensions;
       var year = normalizeYear(pickFirst(row, ['ano', 'año', 'year', 'periodo', 'periodo_ano']));
       var paceValue = pickFirst(row, ['pace', 'pace_2026', 'beneficio_pace', 'beneficiado_pace'])
         || pickFirst(establishment, ['pace', 'pace_2026', 'beneficio_pace', 'beneficiado_pace']);
-      var actionCount = parseNumber(pickFirst(row, ['n_acciones', 'n_accion', 'numero_acciones', 'acciones', 'n_acciones_'])) || 0;
+      var actionCount = outingDeclaration.actionCount;
       var estimatedBudget = extractMoney(observation);
       var hasPace2026 = year === '2026' && parseBooleanFlag(paceValue);
       var schoolName = pickFirst(establishment, [
@@ -295,6 +294,26 @@ function pickFirst(source, keys) {
   }
 
   return '';
+}
+
+function resolvePedagogicalOutingDeclaration(row) {
+  var hasDeclaredOuting = parseBooleanFlag(
+    pickFirst(row, ['si', 'salidas', 'tiene_salida', 'tiene_salidas', 'salida_pedagogica'])
+  );
+
+  if (!hasDeclaredOuting) {
+    return {
+      hasPedagogicalOuting: false,
+      dimensions: [],
+      actionCount: 0,
+    };
+  }
+
+  return {
+    hasPedagogicalOuting: true,
+    dimensions: extractDimensions(pickFirst(row, ['dimension', 'dimensión', 'area', 'área'])),
+    actionCount: parseNumber(pickFirst(row, ['n_acciones', 'n_accion', 'numero_acciones', 'acciones', 'n_acciones_'])) || 0,
+  };
 }
 
 function parseBooleanFlag(value) {

@@ -12,6 +12,23 @@ function normalizeText(value) {
     .toLowerCase();
 }
 
+function parseBooleanFlag(value) {
+  const normalized = String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
+
+  return ['si', 's', 'yes', 'true', '1'].includes(normalized);
+}
+
+function hasDeclaredPedagogicalOuting(item) {
+  const raw = item?.analysisRaw || {};
+  return parseBooleanFlag(
+    raw.si ?? raw.salidas ?? raw.tiene_salida ?? raw.tiene_salidas ?? raw.salida_pedagogica,
+  );
+}
+
 function extractEmailsFromText(value) {
   const matches = String(value || '').match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi);
   return matches ? matches.map((item) => item.toLowerCase()) : [];
@@ -64,13 +81,14 @@ export default function EstablishmentTable({ items, onOpen, strategicMap = {} })
     const normalizedSchoolFilter = normalizeText(schoolFilter);
 
     return itemsWithProfiles.filter((item) => {
+      const hasPedagogicalOuting = hasDeclaredPedagogicalOuting(item);
       const matchesSchool = !normalizedSchoolFilter
         || normalizeText(item.name).includes(normalizedSchoolFilter)
         || normalizeText(item.rbd).includes(normalizedSchoolFilter);
 
       const matchesStatus = statusFilter === 'all'
-        || (statusFilter === 'with' && item.hasPedagogicalOuting)
-        || (statusFilter === 'without' && !item.hasPedagogicalOuting);
+        || (statusFilter === 'with' && hasPedagogicalOuting)
+        || (statusFilter === 'without' && !hasPedagogicalOuting);
 
       const matchesYear = yearFilter === 'all' || item.year === yearFilter;
       const matchesPace = paceFilter === 'all'
@@ -173,7 +191,7 @@ export default function EstablishmentTable({ items, onOpen, strategicMap = {} })
         <div className="flex flex-wrap items-center gap-2 text-xs font-medium text-slate-600">
           <span className="rounded-full bg-slate-100 px-3 py-1">{formatNumber(sortedItems.length)} registros visibles</span>
           <span className="rounded-full bg-emerald-50 px-3 py-1 text-emerald-700">
-            {formatNumber(sortedItems.filter((item) => item.hasPedagogicalOuting).length)} con salida
+            {formatNumber(sortedItems.filter((item) => hasDeclaredPedagogicalOuting(item)).length)} con salida
           </span>
           <button
             type="button"
@@ -370,10 +388,10 @@ export default function EstablishmentTable({ items, onOpen, strategicMap = {} })
                 <td className="border-b border-slate-100 px-4 py-4 align-top">
                   <span
                     className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
-                      item.hasPedagogicalOuting ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'
+                      hasDeclaredPedagogicalOuting(item) ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'
                     }`}
                   >
-                    {item.hasPedagogicalOuting ? 'Con salida' : 'Sin salida'}
+                    {hasDeclaredPedagogicalOuting(item) ? 'Con salida' : 'Sin salida'}
                   </span>
                 </td>
                 <td className="border-b border-slate-100 px-4 py-4 align-top">
