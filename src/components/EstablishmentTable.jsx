@@ -29,6 +29,16 @@ function hasDeclaredPedagogicalOuting(item) {
   );
 }
 
+function hasPedagogicalOutingForTable(item) {
+  if (hasDeclaredPedagogicalOuting(item)) {
+    return true;
+  }
+
+  return Array.isArray(item?.dimensions)
+    && item.dimensions.length > 0
+    && Number(item?.actionCount) > 0;
+}
+
 function extractEmailsFromText(value) {
   const matches = String(value || '').match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi);
   return matches ? matches.map((item) => item.toLowerCase()) : [];
@@ -81,7 +91,7 @@ export default function EstablishmentTable({ items, onOpen, strategicMap = {} })
     const normalizedSchoolFilter = normalizeText(schoolFilter);
 
     return itemsWithProfiles.filter((item) => {
-      const hasPedagogicalOuting = hasDeclaredPedagogicalOuting(item);
+      const hasPedagogicalOuting = hasPedagogicalOutingForTable(item);
       const matchesSchool = !normalizedSchoolFilter
         || normalizeText(item.name).includes(normalizedSchoolFilter)
         || normalizeText(item.rbd).includes(normalizedSchoolFilter);
@@ -191,7 +201,7 @@ export default function EstablishmentTable({ items, onOpen, strategicMap = {} })
         <div className="flex flex-wrap items-center gap-2 text-xs font-medium text-slate-600">
           <span className="rounded-full bg-slate-100 px-3 py-1">{formatNumber(sortedItems.length)} registros visibles</span>
           <span className="rounded-full bg-emerald-50 px-3 py-1 text-emerald-700">
-            {formatNumber(sortedItems.filter((item) => hasDeclaredPedagogicalOuting(item)).length)} con salida
+            {formatNumber(sortedItems.filter((item) => hasPedagogicalOutingForTable(item)).length)} con salida
           </span>
           <button
             type="button"
@@ -388,10 +398,10 @@ export default function EstablishmentTable({ items, onOpen, strategicMap = {} })
                 <td className="border-b border-slate-100 px-4 py-4 align-top">
                   <span
                     className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
-                      hasDeclaredPedagogicalOuting(item) ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'
+                      hasPedagogicalOutingForTable(item) ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'
                     }`}
                   >
-                    {hasDeclaredPedagogicalOuting(item) ? 'Con salida' : 'Sin salida'}
+                    {hasPedagogicalOutingForTable(item) ? 'Con salida' : 'Sin salida'}
                   </span>
                 </td>
                 <td className="border-b border-slate-100 px-4 py-4 align-top">
